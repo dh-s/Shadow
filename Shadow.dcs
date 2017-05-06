@@ -1,0 +1,1426 @@
+!---------------------------------------------------------------------------------------------!
+! This software is copyright David Henderson 2017                                             !
+!                                                                                             !
+! This software is distributed free or charge and without warranty. You may distribute it to  !
+! others provided that you do so free of charge.                                              !
+!                                                                                             !
+! This source code should always be distributed together with the compiled macro (dcx file).  !
+!                                                                                             !
+! You may modify this software for your own use without limitation.  If you convey a copy of  !
+! the modified software to others, you may only do so under the following conditions:         !
+!  1. You convey your source code together with the compiled macro (dcx file).                !
+!  2. You leave this notice intact.  You should add an additional notice regarding your       !
+!     changes, provided it does not in any way limit or modify the intention of this notice.  !
+!  3. The original copyright remains, together with a notice of the modification and the name !
+!     of the person(s) who made the modification.                                             !
+!  4. You do not charge for the software (including not charging for any distribution media). !
+!  5. You allow your modified software to be freely distributed by others.                    !
+!  6. You update the version number to indicate that it is your modification. Appending your  !
+!     initials to the original version number would be adequate for this purpose, potentially !
+!     followed by a numeric version number of your own. (e.g. if Joe Smith produces a         !
+!     modification of version 1.0 of this software, he could version it as 1.0.js.01.  If Joe !
+!     then makes a further modification he could version is as 1.0.js.01.1 if it is a minor   !
+!     fix or as 1.0.js.02 if it introduces new functionality.)                                !
+!                                                                                             !
+!  If you modify the software then you are strongly encouraged to send a copy of your         !
+!  modifications to the author (David Henderson) and agree that he may (at his discretion)    !
+!  include your changes in a future version released by him.  If he does include changes      !
+!  provided by you he may make with an appropriate notation of your contribution in the       !
+!  source file and/or the accompanying documentation.                                         !
+!                                                                                             !
+!  You may also contact the author with bug reports or enhancement suggestions.               !
+!                                                                                             !
+!  You may contact the author (David Henderson) by email to dhsoftware1@gmail.com but he is   !
+!  under no obligation to respond to every or any message.                                    !
+!---------------------------------------------------------------------------------------------!
+
+
+PROGRAM Shadow;
+
+# INCLUDE 'Inc\\_pline.inc'
+# INCLUDE 'Inc\\_misc.inc'
+
+CONST
+	delta = 0.00001;		! used to determine if real values are 'equal'
+
+VAR
+	namever		: string(100);
+
+	north		: real;
+	altitude    : real;
+	azimuth		: real;
+	sunposmsg	: string(16);
+	
+	surface		: entity;
+	
+	mode		: mode_type;
+	pt			: point;
+	key, res	: integer;
+	bres		: boolean;
+	
+	atr			: attrib;
+	str, str1	: string(64);
+	done		: boolean;
+
+	surfacess	: integer;
+	entityss	: integer;
+	ss		: boolean;	! flags to indicate if a surface & entities have been selected
+	
+	origin		: point;
+	
+PROCEDURE msg_OK (msg : str255); BUILTIN 245;
+
+
+
+FUNCTION RealEqual (r1, r2 : real) : boolean;
+BEGIN
+	IF absr(r1-r2) <= delta THEN
+		return true;
+	END;
+	RETURN false;
+END RealEqual;
+
+PROCEDURE RemoveChars (str : IN OUT string; CharsToRemove : string);
+VAR
+	ndx, pos		: integer;
+	pat				: string(1);
+BEGIN
+	FOR ndx := 1 to strlen(CharsToRemove) DO
+		strsub(CharsToRemove, ndx, 1, pat);
+		pos := strpos (pat, str, 1);
+		WHILE pos > 0 DO
+			strdel (str, pos, 1);
+			pos := strpos (pat, str, 1);
+		END;
+	END;
+END RemoveChars;
+
+PROCEDURE GetNorth;
+VAR
+	ang			: real;
+	result, key	: integer;
+	p1, p2		: point;
+	done		: boolean;
+	atr			: attrib;
+	
+	PROCEDURE SaveNorth;
+	BEGIN
+		if atr_sysfind ('ShadowNorth', atr) then
+			atr.ang := north;
+			atr_update (atr);
+		else
+			atr_init (atr, atr_ang);
+			atr.name := 'ShadowNorth';
+			atr.ang := north;
+			atr_add2sys (atr);
+		end;
+	END SaveNorth;
+	
+BEGIN
+	lblsinit;
+	lblset (20, 'Exit');
+	lblson;
+	
+	ang := north;
+	
+	REPEAT
+		wrtmsg ('Select first point to define North');
+		result := getpoint (p1, key);
+		IF result = res_escape THEN
+			IF key = s0 THEN
+				north := ang;
+				return;
+			END;
+		ELSE
+			done := true;
+		END;
+	UNTIL done;
+	REPEAT
+		wrtmsg ('Select a point that is due north of the point just entered');
+		rubln := true;
+		result := getpoint (p2, key);
+		IF result = res_escape THEN
+			IF key = s0 THEN
+				north := ang;
+			END;
+		ELSE
+			ang := angle (p1, p2);
+			done := true;
+		END;
+	UNTIL done;
+	north := ang;
+	SaveNorth;
+END GetNorth;
+
+PROCEDURE SaveSunposmsg;
+BEGIN
+	if atr_sysfind ('ShadSunPosMg', atr) then
+		strassign (atr.str, sunposmsg);
+		atr_update (atr);
+	else
+		atr_init (atr, atr_str);
+		atr.name := 'ShadSunPosMg';
+		strassign (atr.str, sunposmsg);
+		atr_add2sys (atr);
+	end;
+END SaveSunposmsg;
+
+PROCEDURE SaveAzimuth;
+BEGIN
+	if atr_sysfind ('Shad_Azimuth', atr) then
+		atr.ang := azimuth;
+		atr_update (atr);
+	else
+		atr_init (atr, atr_ang);
+		atr.name := 'Shad_Azimuth';
+		atr.ang := azimuth;
+		atr_add2sys (atr);
+	end;
+END SaveAzimuth;
+
+PROCEDURE GetAzimuth;
+VAR
+	ang			: real;
+	result, key	: integer;	
+BEGIN
+	ang := azimuth;
+	lblsinit;
+	lblset (20, 'Exit');
+	lblson;
+	wrtmsg ('Enter sun azimuth: ');
+	result := dgetang (ang, key);		! note: using dgetang instead of getang because the standard function key angles are unlikely to be suitable
+	IF result = res_normal THEN
+		if azimuth <> ang then
+			sunposmsg := '';	! azimuth has been changed, so clear any msg about a saved setting
+			SaveSunposmsg;
+		end;
+		azimuth := ang;
+		SaveAzimuth;
+	END;
+	wrtmsg('');
+END GetAzimuth;
+
+PROCEDURE SaveAltitude;
+BEGIN
+	if atr_sysfind ('ShadAltitude', atr) then
+		atr.ang := altitude;
+		atr_update (atr);
+	else
+		atr_init (atr, atr_ang);
+		atr.name := 'ShadAltitude';
+		atr.ang := altitude;
+		atr_add2sys (atr);
+	end;
+END SaveAltitude;
+
+PROCEDURE GetAltitude;
+VAR
+	ang			: real;
+	result, key	: integer;	
+BEGIN
+	ang := altitude;
+	lblsinit;
+	lblset (20, 'Exit');
+	lblson;
+	wrtmsg ('Enter sun altitude: ');
+	result := dgetang (ang, key);		! note: using dgetang instead of getang because the standard function key angles are unlikely to be suitable
+	IF result = res_normal THEN
+		if altitude <> ang then
+			sunposmsg := '';	! altitude has been changed, so clear any msg about a saved setting
+			SaveSunposmsg;
+		end;
+		altitude := ang;
+		SaveAltitude;
+	END;
+	wrtmsg('');
+END GetAltitude;
+
+FUNCTION DisplayFileError (res : integer; desc : string) : boolean;
+!!! this function checks if the passed res is an error or not.
+!!! if it is not an error then false is returned
+!!! if it is an error then an appropriate msg is displayed and true is returned
+VAR
+	msg	: str255;
+BEGIN
+	IF res = fl_ok THEN
+		return false;
+	ELSIF res = fl_access_denied THEN
+		msg := 'Access Denied';
+	ELSIF res = fl_invalid_access_code THEN
+		msg := 'Invalid Access Code';
+	ELSIF res = fl_invalid_function THEN
+		msg := 'Invalid Function';
+	ELSIF res = fl_invalid_handle THEN
+		msg := 'Invalid Handle';
+	ELSIF res = fl_no_handles_left THEN
+		msg := 'No Handles Left';
+	ELSIF res = fl_not_found THEN
+		msg := 'File Not Found';
+	ELSE
+		msg := 'An';
+	END;
+	strcat (msg, ' error occurred ');
+	strcat (msg, desc);
+	msg_OK (msg);
+	return true;
+END DisplayFileError;
+
+PROCEDURE SaveSunPos;
+!!! creates a file in a Shad folder within the datacad macro directory. The file is named as per the
+!!! function key label entered by the user, with an extension of '.sun'.
+!!! I have chosen to make this a text file so that it is user readable. A separate file is created for
+!!! each different setting (if the user enters a label that has previously been saved then the existing
+!!! file with that name is simply overwritten without warning).
+!!! Each file contains the following information:
+!!!     function key label
+!!!     function key message
+!!!     azimuth (as text, in radians)
+!!!     altitude (as text, in radians)
+!!! The use of a separate file for each saved setting may not be the most efficient from the point of 
+!!! view of the file system, but seems the easiest to implement with the file tools available to DCAL.
+VAR
+	fl			: file;
+	res, key	: integer;
+	desc		: str80;
+	lbl, str	: string(16);
+	path		: str255;
+	filename	: str255;
+	buf			: dosbuf;
+	b			: boolean;
+BEGIN
+	lbl := '';	! default to blank label to stop old values hanging around
+	REPEAT
+		lblsinit;
+		lblset (20, 'Exit');
+		wrtmsg ('Enter function key label: ');
+		lblson;
+		res := dgetstr (lbl, 16, key);
+		wrterr ('');
+		IF res = res_escape THEN
+			IF key = s0 THEN
+				wrtmsg('');
+				return;
+			END;
+		ELSIF strlen(lbl) = 0 THEN		! blank string was entered. Cannot proceed to save with a blank value, so wrterr and stay in the input loop
+			wrterr ('Function key label cannot be blank');
+		END;
+	UNTIL strlen(lbl) > 0;
+	
+	!set a default value for description
+	strassign (desc, lbl);
+	strcat (desc, ' (Azimuth=');
+	cvangst (azimuth, str);
+	strcat (desc, str);
+	strcat (desc, ', Altitude=');
+	cvangst (altitude, str);
+	strcat (desc, str);
+	strcat (desc, ')');
+	
+	lblsinit;
+	lblson;
+	wrtmsg ('Enter description: ');
+	getstr (desc, 80);
+	
+	getpath (path, pathmcr);
+	strcat (path, 'Shad\\*');	! asterisk added for file_pattern call
+	file_pattern (path, 0, buf);
+	strdel (path, strlen(path), 1);		! remove asterisk for later processing when we construct the file name
+	IF NOT file_find (filename, res, buf) THEN	! check if the directory already exists, if not then create it
+		res := mkdir (path);
+		b := DisplayFileError (res, 'creating folder');
+	END;
+	
+	! construct a file name including the full path information
+	strassign (filename, lbl);
+	strins (filename, path, 1);
+	strcat (filename, '.sun');
+	
+	IF file_exist (filename) THEN
+		res := file_del (filename);
+		IF res <> fl_ok THEN
+			msg_OK ('Error updating existing setting');
+			return;
+		END;
+	END;
+
+	res := f_create (fl, filename, true);
+	IF res = fl_ok THEN
+		res := f_wrstr (fl, lbl);
+	END;
+	IF res = fl_ok THEN
+		res := f_wrln (fl);
+	END;
+	IF res = fl_ok THEN
+		res := f_wrstr (fl, desc);
+	END;
+	IF res = fl_ok THEN
+		res := f_wrln (fl);
+	END;
+	IF res = fl_ok THEN
+		cvrllst (azimuth, str);
+		res := f_wrstr (fl, str);
+	END;
+	IF res = fl_ok THEN
+		res := f_wrln (fl);
+	END;
+	IF res = fl_ok THEN
+		cvrllst (altitude, str);
+		res := f_wrstr (fl, str);
+	END;
+	IF res = fl_ok THEN
+		res := f_wrln (fl);
+	END;
+	
+	IF DisplayFileError (res, 'saving to file') THEN
+		res := f_close (fl);	! should try to close the file, but not really any point checking the result
+		return;
+	END;
+	
+	res := f_close (fl);
+
+	IF NOT DisplayFileError (res, 'closing file') THEN
+		wrtmsg ('Sun Postion saved');
+		strassign (sunposmsg, lbl);
+		SaveSunposmsg;
+	END;
+END SaveSunPos;
+
+PROCEDURE GetSunPos;
+VAR
+	filter		: string(16);
+	result, key	: integer;	
+	saved		: array [6..19, 1..2] of real;		! used to store saved azimuth and altitude related to each function key
+	savedlbl	: array [6..19] of string(16);
+	
+	PROCEDURE ShowSaved;
+	VAR
+		path		: str255;
+		pathfilter	: str255;
+		filename	: str255;
+		buf			: dosbuf;
+		fkey		: integer;
+		attr		: integer;
+		fl			: file;
+		errorflag	: boolean;
+		lbl, msg, s	: str255;
+
+	BEGIN
+		! initialise savedlbl array
+		for key := 6 to 19 do
+			savedlbl[key] := '';
+		end;
+	
+		! set the path variable up as a wildcard definition for the filtered sun files
+		getpath (path, pathmcr);
+		strcat (path, 'Shad\\');
+		strassign (pathfilter, path);
+		strcat (pathfilter, filter);
+		strcat (pathfilter, '*.sun');		
+		file_pattern (pathfilter, 0, buf);
+		! cycle through the matching files to set up function keys 6 thru 19 ... if there are more matching files than that then just ignore the remaining ones
+		fkey := 6;
+		ErrorFlag := false;
+		WHILE file_find (filename, attr, buf) AND fkey <= 19 DO
+			strins (filename, path, 1);
+			result := f_open (fl, filename, true, fmode_read);
+			ErrorFlag := DisplayFileError (result, 'opening saved sunpos file');
+			IF NOT ErrorFlag THEN
+				result := f_rdstr (fl, lbl);
+				ErrorFlag := DisplayFileError (result, 'reading function key label');
+			END;
+			IF NOT ErrorFlag THEN
+				result := f_rdln (fl);
+				ErrorFlag := DisplayFileError (result, 'reading ln after lbl');
+			END;
+			IF NOT ErrorFlag THEN
+				result := f_rdstr (fl, msg);
+				ErrorFlag := DisplayFileError (result, 'reading function key message');
+			END;
+			IF NOT ErrorFlag THEN
+				result := f_rdln (fl);
+				ErrorFlag := DisplayFileError (result, 'reading ln after msg');
+			END;
+			IF NOT ErrorFlag THEN
+				result := f_rdstr (fl, s);
+				ErrorFlag := DisplayFileError (result, 'reading azimuth');
+			END;
+			IF NOT ErrorFlag THEN
+				ErrorFlag := not cvstrll (s, saved[fkey, 1]);
+			END;
+			IF ErrorFlag THEN
+				msg_OK ('Error reading saved azimuth');
+			ELSE
+				result := f_rdln (fl);
+				ErrorFlag := DisplayFileError (result, 'reading ln after azimuth');
+			END;
+			IF NOT ErrorFlag THEN
+				result := f_rdstr (fl, s);
+				ErrorFlag := DisplayFileError (result, 'reading altitude');
+			END;
+			IF NOT ErrorFlag THEN
+				ErrorFlag := not cvstrll (s, saved[fkey, 2]);
+			END;
+			IF ErrorFlag THEN
+				msg_OK ('Error reading saved altitude');
+			ELSE
+				! if we get here then we have everything we need to display the saved sun angle on a function key
+				lblset (fkey, lbl);
+				lblmsg (fkey, msg);
+				strassign (savedlbl[fkey], lbl);
+			END;
+
+			result := f_close (fl);		! try to close the file regardless of any errors that may have occurred
+			ErrorFlag := DisplayFileError ( result, 'closing file');
+			fkey := fkey+1;
+		END;
+	END ShowSaved;
+	
+	PROCEDURE GetSaved (ndx : integer);
+	BEGIN
+		azimuth := Saved[ndx, 1];
+		altitude := Saved[ndx, 2];
+		strassign (sunposmsg, savedlbl[ndx]);  
+		SaveAltitude;
+		SaveAzimuth;
+		SaveSunposmsg;
+	END GetSaved;
+	
+BEGIN
+	! initialize saved settings filter
+	if atr_sysfind ('ShadSvFilter', atr) then
+		strassign (atr.str, filter);
+		atr_update (atr);
+	else
+		filter := '';
+	end;
+
+	REPEAT
+		wrtlvl ('Sun Position');
+		lblsinit;
+		wrtmsg ('Select Sun Position (Altitude, Azimuth)');
+		lblset (1, 'Azimuth');
+		cvangst (azimuth, str);
+		if strlen (sunposmsg) > 0 then
+			strins (str, ' (', 1);
+			strins (str, sunposmsg, 1);
+			strcat (str, ')');
+		end;
+		lblmsg (1, str);	
+		lblset (2, 'Altitude');
+		cvangst (altitude, str);
+		if strlen (sunposmsg) > 0 then
+			strins (str, ' (', 1);
+			strins (str, sunposmsg, 1);
+			strcat (str, ')');
+		end;
+		lblmsg (2, str);
+		lblset (3, 'Save');
+		lblmsg (3, 'Save the current azimuth/altitude for future use in any drawing');
+		lblsett (5, 'Filter', strlen(filter)>0);
+		if strlen(filter)= 0 then
+			lblmsg (5, 'Set a filter for display of saved sun positions on function keys');
+		else
+			lblmsg (5, filter);
+		end;
+		
+		ShowSaved;	!positions 6 thru 19 for saved settings
+		
+		lblset (20, 'Exit');
+		
+		getesc (key);
+		IF key = f1 THEN
+			GetAzimuth;
+		ELSIF key = f2 THEN
+			GetAltitude;
+		ELSIF key = f3 THEN
+			SaveSunPos;
+		ELSIF key = f5 THEN
+			if strlen(filter) > 0 then
+				filter := '';				! note: need to toggle filter to enable it to be removed - getstr & dgetstr do not appear to allow you to update a string to a blank value ?!
+			else
+				wrtmsg ('Enter filter to apply to displayed saved settings: ');
+				lblsinit;
+				result := dgetstr (filter, 16, key);
+				wrtmsg ('');
+			end;
+			if atr_sysfind ('ShadSvFilter', atr) then
+				strassign (atr.str, filter);
+				atr_update (atr);
+			else
+				atr_init (atr, atr_str);
+				atr.name := 'ShadSvFilter';
+				strassign (atr.str, filter);
+				atr_add2sys (atr);
+			end;
+			
+		ELSIF (key>=f6) and (key <= f0) THEN	! one of the saved values between F6 & F0 has been selected
+		GetSaved (key - f6 + 6);	! it is possible that the values of the function key constants may
+										! change in future versions, but it is probably reasonably safe to 
+										! assume that f1..f0 will still be in a contiguous range of numbers ...
+		ELSIF (key>=s1) and (key <= s9) THEN	! one of the saved values between S1 & S9 has been selected
+			GetSaved (key - s1 + 11);	! it is possible that the values of the function key constants may
+										! change in future versions, but it is probably reasonably safe to 
+										! assume that s1..s0 will still be in a contiguous range of numbers ...
+		ELSIF key = s0 THEN
+			return;
+		END;
+	UNTIL false;
+END GetSunPos;
+	
+PROCEDURE GetModMat (mat : IN OUT modmat; modaltitude : IN OUT real);
+!!! This procedure will calculate a transformation that can be applied to move the surface to be in the horizontal plane
+!!! at a z height of zero.  This simplifies subsequent calculations.
+!!! The proc also returns the modified altitude of the sun (after the transformation has been applied).
+VAR
+	h_rotation	: real;
+	i			: integer;
+	min, max	: point;
+	tanang, ang	: real;
+	matrotdone	: boolean;
+	sunvec		: array [0..1] of point;
+	rad, planang: real;
+	mod_surface	: entity;
+	sunvector	: array [0..1] of point;	! stores the direction of the suns rays as being from points [0] to [1]
+											! which makes it easy to modify the sun direction using a modelling matrix
+											! to modify the points.
+BEGIN
+	matrotdone := false;
+	! find the max & min x values of the points in the surface polygon - then use the corresponding points to create
+	! a rotation transformation around the y axis
+	min := surface.plyPnt[1];
+	max := min;
+	FOR i := 2 to surface.plyNpnt DO
+		if surface.plyPnt[i].x < min.x then
+			min := surface.plyPnt[i];
+		end;
+		if surface.plyPnt[i].x > max.x then
+			max := surface.plyPnt[i];
+		end;
+	END;
+	! check that min & max x values are different.  If not then surface is vertical and parallel
+	! to the y axis, so just a single rotation of -90 degrees around the y axis is required.
+	if RealEqual (min.x, max.x) then
+		setrotate (mat, -halfpi, y);
+		matrotdone := true;
+	else
+		! first rotate about the z axis so that the line between max & min is
+		! parallel to the x axis
+		tanang := (max.y - min.y)/(max.x - min.x);
+		ang := atan(tanang);
+		setrotrel (mat, -ang, z, min);
+
+		! then rotate about the y axis
+		xformpt (min, mat, min);
+		xformpt (max, mat, max);
+		tanang := (max.z - min.z)/(max.x - min.x);
+		ang := atan(tanang);
+		catrotrel (mat, ang, y, min);
+	end;
+	
+	! set up mod_surface by applying the transformation to surface
+	mod_surface := surface;
+	FOR i:=1 to mod_surface.plyNpnt DO
+		xformpt (surface.plyPnt[i], mat, mod_surface.plyPnt[i]);
+	END;	
+
+	! add a rotation around the x axis if required
+	! find the max & min y values of the points in the mod_surface polygon - then use the corresponding points
+	! to create a rotation transformation around the y axis
+	IF not matrotdone THEN
+		min := mod_surface.plyPnt[1];
+		max := min;
+		FOR i := 2 to mod_surface.plyNpnt DO
+			if mod_surface.plyPnt[i].y < min.y then
+				min := mod_surface.plyPnt[i];
+			end;
+			if mod_surface.plyPnt[i].y > max.y then
+				max := mod_surface.plyPnt[i];
+			end;
+		END;
+		tanang := (max.z - min.z	)/(max.y - min.y);
+		ang := atan(tanang);
+		catrotate (mat, -ang, x);
+	END;
+	
+	! apply the transformation to a point on the polygon to determine the 
+	! new z height
+	xformpt (surface.plyPnt[1], mat, mod_surface.plyPnt[1]);
+	! add an additional transformation to move to z height of zero
+	cattran (mat, 0.0, 0.0, -mod_surface.plypnt[1].z);
+
+	! now set up the sun angles as a vector and apply modmat to it ... this
+	! makes it easy to modify the sun position with the modelling matrix.
+	setpoint (sunvec[1], 0.0);
+	sphere_cart (1000.0, north+azimuth, altitude, sunvec[0].x, sunvec[0].y, sunvec[0].z);  ! Note: The radius of 1000 is just an arbitary number
+	xformpt (sunvec[0], mat, sunvec[0]);
+	xformpt (sunvec[1], mat, sunvec[1]);
+	
+	! now concatenate a rotation around the z axis so that the sun will cast shadows
+	! parallel to the x axis - this just means that subsequent shadow calcs can treat 
+	! the shadow casting as a simple 2d slope rather than have to worry about 3d calcs.
+	cart_sphere (sunvec[0].x-sunvec[1].x, sunvec[0].y-sunvec[1].y, sunvec[0].z-sunvec[1].z, 
+				 rad, planang, modaltitude);	! get the planang of the sun vector, also the modified altitude
+	catrotate (mat, -planang, z);
+	
+	! Not sure how often this will happen in practice, but I think there is at least a technical possibility
+	! that (after all this twisting and turning) the sun may be below the surface plane.  We wouldn't
+	! really need to know if we were assured that all of the entities casting shadows were completely above
+	! the surface plane.  But we have no such assurance and subsequent processing will need to work out what
+	! is above and what is below the surface.  So, to make my visualisation easier, I'm going to check if the 
+	! sun is shining upwards or downwards with the current mat.  If it is upwards then I will append another
+	! 180 degree rotation about the x axis ...
+	IF sunvec[0].z < sunvec[1].z THEN
+		catrotate (mat, pi, x);
+	END;
+
+
+END GetModMat;
+
+PROCEDURE HighlightSurface;
+!!! Highlight the surface entity by drawing it dashed in grey with increased line width. New line details are
+!!! not saved, so subsequent call to regen will display it normally again).
+VAR
+	SvWgt	: boolean;
+BEGIN
+	ent_draw (surface, drmode_black);
+	surface.ltype := ltype_dashed;
+	surface.spacing := 13.0*pixsize;
+	surface.color := clrltgray;
+	surface.width := 2;
+	SvWgt := showwgt;
+	showwgt := true;
+	ent_draw (surface, drmode_white);
+	showwgt := SvWgt;
+END HighlightSurface;
+{
+FUNCTION HighlightEntities : boolean;
+!!! this function will return true if acceptable entities (polygons) are included in entmode, otherwise returns false.
+!!! acceptable entities are highlighted by drawing them with increased line width (new width is not saved, so a 
+!!! subsequent call to regen will display them normally again).
+VAR
+	result	: boolean;
+	addr 	: entaddr;
+	ent		: entity;
+BEGIN
+	if entityss < 0 then
+		return false;
+	end;
+	result := false;
+	mode_init (entmode);
+	mode_ss (entmode, entityss);
+	addr := ent_first (entmode);
+	WHILE ent_get (ent, addr) DO
+		IF ent.enttype = entply THEN
+			result := true;
+			ent.width := ent.width+2;
+			ent_draw (ent, drmode_white);
+		END;
+		addr := ent_next (ent, entmode);
+	END;
+	return result;
+END HighlightEntities;
+}
+
+PROCEDURE HighlightEnt (ent: IN OUT entity; show : boolean; surface : boolean);
+VAR
+	tempent		: entity;
+	i, j		: integer;
+BEGIN
+	if show then
+		ent_draw_dl (ent, drmode_black, false);
+		ent.ltype := ltype_dashed;
+		if surface then
+			ent.spacing := 20.0*pixsize;
+			ent.width := ent.width+1;
+		else
+			ent.spacing := 13.0*pixsize;
+		end;
+		ent.color := clrltgray;
+		if ent.enttype = entply then
+			! In some views different edges of the polygon may overlap each other on the display (as
+			! would happen in a vertical polygon in plan view for example). In this case it is possible
+			! then the dashes in one overlapping line could fill in the spaces in the other line, and so
+			! the highlight does not display very well. To minimise this happening, we draw each edge 
+			! seperately and ensure that the lines are going in the same direction (not foolproof, but 
+			! reliable in the example of a vertical polygon in plan view, which is likely to be a 
+			! common scenario).
+			ent_init (tempent, entln3);
+			tempent.color := clrltgray;
+			tempent.spacing := ent.spacing;
+			tempent.width := ent.width+1;
+			for i := 1 to ent.plyNpnt do
+				if i=ent.plyNpnt then
+					j := 1;
+				else
+					j := i+1;
+				end;
+				if distance (origin, ent.plypnt[i]) < distance (origin, ent.plypnt[j]) then
+					tempent.ln3Pt1 := ent.plypnt[i];
+					tempent.ln3Pt2 := ent.plypnt[j];
+				else
+					tempent.ln3Pt1 := ent.plypnt[j];
+					tempent.ln3Pt2 := ent.plypnt[i];
+				end;
+				tempent.ltype := ltype_solid;
+				ent_draw_dl (tempent, drmode_black, false);
+				tempent.ltype := ltype_dashed;
+				ent_draw_dl (tempent, drmode_white, false);
+			end;
+		else
+			ent_draw_dl (ent, drmode_white, false);
+		end;
+	else
+		if surface then
+			ent.width := ent.width+1;
+			ent_draw_dl (ent, drmode_black, false);
+			ent.width := ent.width-1;
+		else
+			ent_draw_dl (ent, drmode_black, false);
+		end;
+		ent_draw_dl (ent, drmode_white, false);
+	end;
+END HighlightEnt;
+
+
+PROCEDURE HighlightSS (num : integer; show : boolean; surface : boolean);
+!!! Highlights entities by drawing them dashed grey. If show is false then
+!!! they are drawn in their original colour/line type.
+!!! If surface is true then highlight with a longer dash and with increased
+!!! line width.
+!!! num is Selection Set number.
+VAR
+	modess		: mode_type;
+	ent			: entity;
+	addrss		: entaddr;
+	i, j		: integer;
+	tempent		: entity;
+	temppnt		: point;
+BEGIN
+	if num< 0 or num>15 then
+		return;
+	end;
+	if sslength (num) = 0 then
+		return;
+	end;
+	mode_init (modess);
+	mode_ss (modess, num);
+	addrss := ent_first (modess);
+	WHILE ent_get (ent, addrss) DO
+		HighlightEnt (ent, show, surface);
+		addrss := ent_next (ent, modess);
+	END;
+END HighlightSS;
+
+
+PROCEDURE GetSurface;
+VAR
+	b			: boolean;
+	svsurface	: entity;
+BEGIN
+	regen; 	! remove any existing higlighted surface
+	HighlightSS (entityss, true, false);	! re-highlight any selected entities unhighlighted by the above regen
+	svsurface := surface;
+	lblsinit;
+	lblset (20, 'Exit');
+	lblson;
+	REPEAT
+		wrtmsg ('Select polygon to cast shadows onto');
+		res := getpoint (pt, key);
+		IF res = res_normal THEN
+			mode_init (mode);
+			IF lyrsearch THEN
+				mode_lyr (mode, lyr_on);
+			ELSE
+				mode_lyr (mode, lyr_curr);
+			END;
+			mode_enttype (mode, entply);
+			bres := ent_near (surface, pt.x, pt.y, mode, true);
+			IF bres THEN
+				HighlightSurface;
+				! store the address of the surface as an attribute in the drawing
+				if atr_sysfind ('ShadSurface', atr) then
+					atr.lgladdr := lgl_addr(surface.addr);
+					atr_update (atr);
+					ss := true;
+				else
+					atr_init (atr, atr_addr);
+					atr.name := 'ShadSurface';
+					atr.lgladdr := lgl_addr(surface.addr);
+					atr_add2sys (atr);
+					ss := true;
+				end;
+				return;
+			ELSE
+				msg_OK ('Selected point too far from a suitable polygon');
+			END;
+
+		ELSIF res = res_escape THEN
+			IF key = s0 THEN
+				surface := svsurface;
+				IF ss THEN
+					HighlightSurface;
+				END;
+				RETURN;
+			END;
+		END;
+	UNTIL false;
+END GetSurface;
+
+
+PROCEDURE UserSelectSS;
+var
+	i, key		: integer;
+	name		: string(16);
+	ssmode		: mode_type;
+	addr		: entaddr;
+	ent			: entity;
+BEGIN
+	repeat
+		lblsinit;
+		for i := 0 to 7 do
+			ssGetName (i, name);
+			lblsett (i+1, name, i=entityss);
+		end;
+		if entityss > 0 then
+			lblset (12, 'Add To Set');
+			lblmsg (12, 'Add entities to selection set');
+			lblset (13, 'Del From Set');
+			lblmsg (13, 'Remove entities from selection set');
+			lblset (14, 'Clear Set');
+			lblmsg (14, 'Clear selection set');
+			lblset (15, 'Rename');
+			lblmsg (15, 'Rename Selection Set to \'ShadEnts\'');
+		end;
+		lblset (20, 'Exit');
+		wrtmsg ('Choose Selection Set to use for Shadow Entities');
+		lblson;
+		getesc (key);
+		if key = s0 then
+			return;
+		elsif key >= f1 and key <= f8 then
+			key := key-f1;
+			if key=entityss then
+				HighlightSS (entityss, false, false);
+				entityss := -1;
+			else
+				HighlightSS (entityss, false, false);
+				entityss := key;
+				HighlightSS (entityss, true, false);
+			end;
+		elsif (key = s4) and (entityss > 0) then
+			HighlightSS (entityss, false, false);
+			ssClear (entityss);
+		elsif (key = s5) and (entityss > 0) then
+			ssSetName (entityss, 'ShadEnts');
+		elsif (key = s2) and (entityss > 0) then
+			i := getmode ('add to Selection Set', ssmode, key);
+			if i = res_normal then
+				addr := ent_first (ssmode);
+				WHILE ent_get (ent, addr) DO
+					addr := ent_next (ent, ssmode);
+					if not ssMember (entityss, ent) then
+						ssAdd (entityss, ent);
+						HighlightEnt (ent, true, false);
+					end;
+				END;
+			end;
+			elsif (key = s3) and (entityss > 0) then
+			i := getmode ('remove from Selection Set', ssmode, key);
+			if i = res_normal then
+				addr := ent_first (ssmode);
+				WHILE ent_get (ent, addr) DO
+					addr := ent_next (ent, ssmode);
+					if ssDel (entityss, ent) then
+						HighlightEnt (ent, false, false);
+					end;
+				END;
+			end;
+		end;
+	until false;
+END UserSelectSS;
+
+{
+PROCEDURE GetEntities;
+VAR
+	plyfound	: boolean;
+	svmode		: mode_type;
+BEGIN
+	regen; ! remove any existing hightlighted entities
+	if ss then 
+		highlightsurface;	! re-highlight surface which will have been unhighlighted by the above regen
+	end;
+
+	REPEAT
+		lblsinit;
+		svmode := entmode;
+		res := getmode ('to cast shadows of', entmode, key);
+		IF res = res_escape THEN
+			if key=s0 THEN 
+				if es then
+					entmode := svmode;
+					plyfound := HighlightEntities;	! re-highlight existing selected entities
+				end;
+				return;
+			END;
+		ELSIF res = res_normal THEN
+			! this version of the macro will only cast shadows of polygons,
+			! so check that there is at least 1 polygon in the selection
+			plyfound := HighlightEntities;
+			IF plyfound THEN
+				es := true;
+				return;
+			ELSE
+				msg_OK ('Shadows will only be cast for polygon entities');
+				msg_OK ('Selection must include polygons');
+			END;
+		END;
+	UNTIL false;
+END GetEntities;
+}
+PROCEDURE SetShadSymbolName (symname : IN OUT symstr);
+!!! Create a suitable name for the symbol. Make the name as informative as possible so that useful information is 
+!!! displayed if it is identified in DataCAD.  Also include date/time of creation to ensure name of each shadow is
+!!! unique. Name will be in one of the following 2 formats (the first format is used if the sun position is named 
+!!! [i.e. if it has an associated sunposmsg], otherwise the second format is used):
+!!!     SHADOW sunposmsg_______  Created:yyyymmdd hh:mm:ss
+!!!     SHADOW Az:359-59-59 Al:359-59-59  Created:yyyymmdd hh:mm:ss
+
+VAR
+	y,m,d,h,mi,s,hu	: integer; !year, month, day, hours, minutes, seconds, hundredths
+	str				: str255;
+	
+	PROCEDURE Append2DigitStr (num : IN integer);
+	!!! actually allows more than 2 digits, but inserts a zero at the front of the string if it is less than 2 digits
+	BEGIN
+		cvintst (num, str);
+		if strlen(str)<2 then
+			strins (str, '0', 1);
+		end;
+		strcat (symname, str);
+	END Append2DigitStr;
+
+BEGIN
+	symname := 'SHADOW ';
+	if strlen(sunposmsg) > 0 then
+		strcat (symname, sunposmsg);
+	else
+		strcat (symname, 'Az:');
+		cvangst (azimuth, str);
+		strcat (symname, str);
+		strcat (symname, ' Al:');
+		cvangst (altitude, str);
+		strcat (symname, str);
+	end;
+	strcat (symname, '  Created:');
+	ReadClock (y, m, d, h, mi, s, hu);
+	Append2DigitStr (y);
+	Append2DigitStr (m);
+	Append2DigitStr (d);
+	strcat (symname, ' ');
+	Append2DigitStr (h);
+	strcat (symname, ':');
+	Append2DigitStr (mi);
+	strcat (symname, ':');
+	Append2DigitStr (s);
+	RemoveChars (symname, '"\'');	!'! Remove single and double quote characters which may be in the string as a result of the cvangst calls.
+									  ! (if left in the symbol name these characters will cause the DataCAD drawing to crash)
+END SetShadSymbolName;
+
+{
+PROCEDURE ClipShadow (surfpnt : pntarr; surfnpnt : integer; shadpnt : array of point; shadnpnt : integer);
+TYPE 
+	Intersection = RECORD
+		pnt		: point;
+		sundx	: integer;
+		shndx	: integer;
+	END;
+VAR
+	i, j, k, l		: integer;
+	Intersections : array [1..100] of Intersection;
+	nint					: integer;
+	
+BEGIN
+	nint := 0;
+	for i := 1 to shadnpnt do
+		j := i+1;
+		if j > shadnpnt then
+			j := 1;
+		end;
+		for k := 1 to surfnpnt do
+			l := k+1;
+			if l > surfnpnt then
+				l := 1;
+			end;
+			if intrlinlin (shadpnt[i], shadpnt[j], surfpnt[k], surfpnt[l], Intersctions[nint+1].pnt, true) then
+				nint := nint+1;
+				Intersections[nint].sundx := k;
+				Intersections[nint].shndx := i;
+			end;
+		end;
+	end;
+END ClipShadow;
+}
+
+
+PROCEDURE GenShadows;
+VAR
+	addr, v_addr	: entaddr;
+	ent, v_ent		: entity;
+	mod_altitude	: real;
+	tan_altitude	: real;
+	mat, invmat		: modmat;
+	det				: real;
+	b				: boolean;
+	i, j, k			: integer;
+	shadow, v_shad	: entity;
+	points			: array [1..100] of point;
+	npoints			: integer;
+	shad_mode		: mode_type;
+	sym				: symbol;
+	ref				: point;
+	ratio			: real;
+	zpnt			: point;
+	shadpv			: polyvert;
+	shadmode		: mode_type;
+	symname			: symstr;
+	str				: str80;
+	shadowcreated	: integer;
+	entmode		: mode_type;
+
+	FUNCTION Cast (castent : IN entity; shad : IN OUT entity) : boolean;
+	!!! calculates shadow for ent and returns the shadow in shad. Returns false
+	!!! if the entity is completely below the surface being cast onto (otherwise
+	!!! creates the entity and returns true.
+	VAR
+		below		: boolean;	! flag used to indicate if any points are below the surface plane
+		abovepnt	: integer;	! index of the first point that is above the surface
+	BEGIN
+		!set up points as being the points of castent with the modelling matrix applied
+		npoints := castent.plyNpnt;
+		below := false;
+		abovepnt := 0;
+		for i := 1 to npoints do
+			xformpt (castent.plyPnt[i], mat, points[i]);
+			if points[i].z < 0.0 then
+				below := true;
+			elsif abovepnt=0 then
+				abovepnt := i;
+			end;
+		end;
+		
+		if abovepnt = 0 then	! no points found that were above the surface
+			npoints := 0;
+			return false;
+		end;
+
+		if below then
+			i := 1;
+			while i <= npoints do
+				j := i+1;
+				if j > npoints then
+					j := 1;
+				end;
+				if ((points[i].z < 0.0) and (points[j].z > 0.0)) or ((points[i].z > 0.0) and (points[j].z < 0.0)) then
+					! the side between these 2 points crosses z zero, so work out the point where this occurs
+					ratio := points[i].z/(points[i].z - points[j].z);
+					zpnt.x := points[i].x - (points[i].x - points[j].x)*ratio;
+					zpnt.y := points[i].y - (points[i].y - points[j].y)*ratio;
+					zpnt.z := 0.0;
+					! insert this point into the array
+					if j=1 then
+						npoints := npoints+1;
+						points[npoints] := zpnt;
+					else
+						for k := npoints to j by -1 do
+							points[k+1] := points[k];
+						end;
+						npoints := npoints+1;
+						points[j] := zpnt;
+					end;
+					i := i+1;
+				end;
+				i := i+1;
+			end;
+
+			! remove all the points in the array that are below the surface
+			i:=1;
+			while i <= npoints do
+				if points[i].z < 0.0 then
+					if j = npoints then 
+						npoints := npoints-1;
+					else
+						for j := i+1 to npoints do
+							points[j-1] := points[j];
+						end;
+						npoints := npoints-1;
+					end;
+				else
+					i := i+1;
+				end;
+			end;
+		end;
+
+		! cast the point so shadow at z zero.
+		for i := 1 to npoints do
+			points[i].x := points[i].x - points[i].z/tan_altitude;		! calculate shadow x based on z hight and modified sun altitude. 
+			points[i].z := 0.0;
+		end;
+		
+		! create a polyline entity with these points
+		ent_init (shad, entPln);
+		shad.plnbase := 0.0;
+		shad.plnhite := 0.0;
+		shad.plnclose := true;
+		ent_add (shad);
+		for i := 1 to npoints do
+			polyvert_init (shadpv);
+			shadpv.shape := pv_vert;
+			shadpv.pnt := points[i];
+			polyvert_add (shadpv, shad.plnfrst, shad.plnlast);
+			ent_update (shad);
+		end;
+
+		return true;
+	END Cast;
+	
+BEGIN
+	if (not ss) and (entityss < 0) then
+		msg_OK ('Entities and Surface to cast onto must be selected first');
+		return;
+	elsif not ss then
+		msg_OK ('You must select a surface to cast shadows onto');
+		return;
+	elsif entityss < 0 then
+		msg_OK ('You must select entities to cast shadows of');
+		return;
+	end;
+	
+	! if we get here then it looks like we are ready to cast shadows
+	
+	! call GetModMat to create a modelling matrix that will rotate everything so that
+	! the surface is level at a z height of zero - this just makes subsequent calculations
+	!  that much easier ...
+	GetModMat (mat, mod_altitude);
+	! ... and we will need the inverse of mat to put shadows back to their correct positions 
+	! after creating them
+	b := invert (mat, invmat, det);
+	if not b then
+		msg_OK ('Sorry: an unexpected error has occurred');
+		return;
+	end;
+	if RealEqual (mod_altitude, 0.0) or RealEqual (mod_altitude, pi) then
+		msg_OK ('Sun rays are parallel to surface');
+		msg_OK ('Cannot cast shadows');
+		return;
+	end;
+	tan_altitude := tan (mod_altitude);
+	
+	! now step through the entities and create a shadow entity for each
+	stopgroup;	! start a new group for the shadow entites
+	shadowcreated := 0;
+	mode_init (entmode);
+	mode_ss (entmode, entityss);
+	addr := ent_first (entmode);
+	WHILE ent_get (ent, addr) DO
+		IF ent.enttype = entply THEN		! we are only processing polygons ... ignore any other entities
+			IF Cast (ent, shadow) THEN
+				shadowcreated := shadowcreated+1;
+
+				! process any voids
+				v_addr := ent.plyfrstvoid;
+				WHILE void_get (v_ent, v_addr) DO
+					b := Cast (v_ent, v_shad);
+					v_addr := v_ent.next;
+				END;
+
+			END;
+		END;
+		addr := ent_next (ent, entmode);
+	END;
+	stopgroup;	! stop the group for shadow entites
+
+	if shadowcreated > 0 then
+		! create a symbol to contain all the shadows that are currently transformed by mat
+		! (the symbol itself will be rotated back into position using invmat once it is inserted)
+		SetShadSymbolName (symname);
+		mode_init (shadmode);
+		mode_group (shadmode, shadow);
+
+		setpoint (ref, 0.0);
+		sym_create (sym, shadmode, ref, symname, true, true);
+		ent_init (shadow, entsym);
+		shadow.symname := symname;
+		shadow.symmod := invmat;
+		ent_add (shadow);
+		ent_draw (shadow, drmode_white);
+		cvintst (shadowcreated, str);
+		strins (str, 'Shadows created for ', 1);
+		if shadowcreated = 1 then
+			strcat (str, ' entity.');
+		else
+			strcat (str, ' entities.');
+		end;
+		wrterr (str);
+	else
+		msg_OK ('No shadows cast on this surface by entity(s)');
+	end;
+END GenShadows;
+
+PROCEDURE SunsEye;
+VAR
+	b			: boolean;
+	view		: view_type;
+	scalenum	: integer;
+	viewcent	: point;
+BEGIN
+	! first remove any existing 'Suns-Eye' views
+	view.next := view_first;
+	WHILE view_get (view, view.next) DO
+		if strcomp(view.name, 'Suns-Eye', -1) then
+			view_del(view);
+		end;
+	END;
+	
+	! get current scalenum & cent to use in the new view
+	view_getcurr (view);
+	scalenum := view.scalenum;
+	viewcent := view.viewcent;
+	
+	! setup the new view
+	view_init (view);
+	view_calcpara (view, viewcent, north+azimuth-pi, -altitude, scalenum);
+	
+	! add new view to the drawing		NOTE: as far as I can see, view_setcurr should work without adding the view to the dwg, but this did not seem to work
+	view.name := 'Suns-Eye';
+	view_add(view);	
+	
+	! display the view with the surface & entities highlighted
+	view_setcurr (view, true);
+	HighlightSurface;
+	HighlightSS (entityss, true, false);
+
+END SunsEye;
+
+
+PROCEDURE Initialise;
+VAR
+	i	: integer;
+BEGIN
+	namever :='Shadow v0.3   Copyright D Henderson 2017.';
+
+	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
+	
+	!if there is a selection set named 'ShadEnts' the set this to define the shadow entities
+	entityss := -1;
+	for i := 0 to 7 do
+		ssGetName (i, str);
+		if strcomp ('ShadEnts', str, -1) then
+			entityss := i;
+		end;
+	end;
+	HighlightSS (entityss, true, false);
+
+	! if there is not an existing 'ShadowNorth' attribute in the drawing, then prompt
+	! for North before doing anything else
+	if atr_sysfind ('ShadowNorth', atr) then
+		north := atr.ang;
+	else
+		north := halfpi;
+		GetNorth;
+	end;
+
+	! if there is not an existing 'Shad_Azimuth' attribute in the drawing, then default to zero
+	if atr_sysfind ('Shad_Azimuth', atr) then
+		azimuth := atr.ang;
+	else
+		azimuth := 0.0;
+	end;
+
+	! if there is not an existing 'ShadAltitude' attribute in the drawing, then defalt to halfpi
+	if atr_sysfind ('ShadAltitude', atr) then
+		altitude := atr.ang;
+		! set sunposmsg if there is an existing attribute in the drawing
+		sunposmsg := '';
+		if atr_sysfind ('ShadSunPosMg', atr) then
+			strassign (sunposmsg, atr.str);
+		end;
+	else
+		altitude := halfpi;
+	end;
+
+	! check if a surface polygon has previously been selected for this drawing
+	ss := false;
+	if atr_sysfind ('ShadSurface', atr) then
+		if ent_get (surface, entaddr(atr.lgladdr)) then
+			if surface.enttype = entply then
+				ss := true;
+				highlightsurface;
+			end;
+		end;
+	end;
+END Initialise;
+
+BEGIN
+	Initialise;
+
+	done := false;
+	REPEAT
+		wrtlvl ('Shadow');
+		wrtmsg(namever);
+		lblsinit;
+		lblset (1, 'North');
+		cvangst (north, str);
+		lblmsg (1, str);
+		lblset (2, 'Sun Position');
+		str := 'Set azimuth & altitude (currently ';
+		if strlen(sunposmsg) > 0 then
+			strcat (str, sunposmsg);
+		else
+			cvangst (azimuth, str1);
+			strcat (str, str1);
+			strcat (str, ' and ');
+			cvangst (altitude, str1);
+			strcat (str, str1);
+		end;
+		strcat (str, ')');
+		lblmsg (2, str);
+		
+		lblset (4, 'Sun-eye view');
+		lblmsg (4, 'Set viewing projection to view from the sun position');
+		
+		lblset (8, 'Entities');
+		lblmsg (8, 'Select entities to cast shadows');
+		
+		lblset (10, 'Surface');
+		lblmsg (10, 'Select polygon to define surface shadows are cast onto');
+		
+		lblset (15, 'Start');
+		lblmsg (15, 'Generate shadows for selected entities');
+		
+		lblset (20, 'Exit');
+		
+		lblson;
+		
+		getesc (key);
+		IF key=f1 THEN
+			GetNorth;
+		ELSIF key=f2 THEN
+			GetSunPos;
+		ELSIF key = f4 THEN
+			SunsEye;
+		ELSIF key = f8 THEN
+			UserSelectSS;
+		ELSIF key = f0 THEN
+			GetSurface;
+		ELSIF key = s5 THEN
+			GenShadows;
+		ELSIF key = s0 THEN
+			done := true;
+		END;
+
+	UNTIL done;
+	
+	regen;		! get rid of any higlights that are hanging around
+	
+END Shadow.
+
