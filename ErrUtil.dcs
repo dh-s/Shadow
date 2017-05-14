@@ -1,0 +1,48 @@
+MODULE ErrUtil;
+
+PROCEDURE msg_OK (msg : str255); BUILTIN 245;
+PROCEDURE execAndWait ( prog : str255; Visibility: integer; returnCode : OUT integer); BUILTIN 632;
+
+FUNCTION DisplayFileError (res : integer; desc : string) : boolean;			PUBLIC;
+!!! this function checks if the passed res is an error or not.
+!!! if it is not an error then false is returned
+!!! if it is an error then an appropriate msg is displayed and true is returned
+VAR
+	msg	: str255;
+BEGIN
+	IF res = fl_ok THEN
+		return false;
+	ELSIF res = fl_access_denied THEN
+		msg := 'Access Denied';
+	ELSIF res = fl_invalid_access_code THEN
+		msg := 'Invalid Access Code';
+	ELSIF res = fl_invalid_function THEN
+		msg := 'Invalid Function';
+	ELSIF res = fl_invalid_handle THEN
+		msg := 'Invalid Handle';
+	ELSIF res = fl_no_handles_left THEN
+		msg := 'No Handles Left';
+	ELSIF res = fl_not_found THEN
+		msg := 'File Not Found';
+	ELSE
+		msg := 'An';
+	END;
+	strcat (msg, ' error occurred ');
+	strcat (msg, desc);
+	msg_OK (msg);
+	return true;
+END DisplayFileError;
+
+PROCEDURE DisplayVerboseMsg (msg : string);		PUBLIC;
+VAR
+	res : integer;
+	str : str255;
+BEGIN
+	execAndWait ('%windir%\\system32\\calc.exe', 1, res);
+	cvintst (res, str);
+	strins (str, 'ExecAndWait res: ', 1);
+	MSG_OK (str);
+END DisplayVerboseMsg;
+
+
+END ErrUtil.

@@ -25,7 +25,7 @@
 !  If you modify the software then you are strongly encouraged to send a copy of your         !
 !  modifications to the author (David Henderson) and agree that he may (at his discretion)    !
 !  include your changes in a future version released by him.  If he does include changes      !
-!  provided by you he may make with an appropriate notation of your contribution in the       !
+!  provided by you he may make an appropriate notation of your contribution in the       !
 !  source file and/or the accompanying documentation.                                         !
 !                                                                                             !
 !  You may also contact the author with bug reports or enhancement suggestions.               !
@@ -37,15 +37,15 @@
 
 PROGRAM Shadow;
 
-# INCLUDE 'Inc\\_pline.inc'
-# INCLUDE 'Inc\\_misc.inc'
+# INCLUDE '..\\..\\Inc\\_pline.inc'
+# INCLUDE '..\\..\\Inc\\_misc.inc'
+# INCLUDE 'pntutil.inc'
+# INCLUDE 'Errutil.inc'
 
-CONST
-	delta = 0.00001;		! used to determine if real values are 'equal'
 
 VAR
 	namever		: string(100);
-
+mat, invmat		: modmat;
 	north		: real;
 	altitude    : real;
 	azimuth		: real;
@@ -67,14 +67,19 @@ VAR
 	ss		: boolean;	! flags to indicate if a surface & entities have been selected
 	
 	origin		: point;
+	tempstr		: str255;
+	
+	colour		: integer;
+	entclr		: integer;
+	trim			: boolean;
 	
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
-
+FUNCTION msg_dlg (msg : str255; msgDlgType, msgDlgButtons : integer) : integer; BUILTIN 246;
 
 
 FUNCTION RealEqual (r1, r2 : real) : boolean;
 BEGIN
-	IF absr(r1-r2) <= delta THEN
+	IF absr(r1-r2) <= ABSZero THEN
 		return true;
 	END;
 	RETURN false;
@@ -235,35 +240,6 @@ BEGIN
 	wrtmsg('');
 END GetAltitude;
 
-FUNCTION DisplayFileError (res : integer; desc : string) : boolean;
-!!! this function checks if the passed res is an error or not.
-!!! if it is not an error then false is returned
-!!! if it is an error then an appropriate msg is displayed and true is returned
-VAR
-	msg	: str255;
-BEGIN
-	IF res = fl_ok THEN
-		return false;
-	ELSIF res = fl_access_denied THEN
-		msg := 'Access Denied';
-	ELSIF res = fl_invalid_access_code THEN
-		msg := 'Invalid Access Code';
-	ELSIF res = fl_invalid_function THEN
-		msg := 'Invalid Function';
-	ELSIF res = fl_invalid_handle THEN
-		msg := 'Invalid Handle';
-	ELSIF res = fl_no_handles_left THEN
-		msg := 'No Handles Left';
-	ELSIF res = fl_not_found THEN
-		msg := 'File Not Found';
-	ELSE
-		msg := 'An';
-	END;
-	strcat (msg, ' error occurred ');
-	strcat (msg, desc);
-	msg_OK (msg);
-	return true;
-END DisplayFileError;
 
 PROCEDURE SaveSunPos;
 !!! creates a file in a Shad folder within the datacad macro directory. The file is named as per the
@@ -692,34 +668,6 @@ BEGIN
 	ent_draw (surface, drmode_white);
 	showwgt := SvWgt;
 END HighlightSurface;
-{
-FUNCTION HighlightEntities : boolean;
-!!! this function will return true if acceptable entities (polygons) are included in entmode, otherwise returns false.
-!!! acceptable entities are highlighted by drawing them with increased line width (new width is not saved, so a 
-!!! subsequent call to regen will display them normally again).
-VAR
-	result	: boolean;
-	addr 	: entaddr;
-	ent		: entity;
-BEGIN
-	if entityss < 0 then
-		return false;
-	end;
-	result := false;
-	mode_init (entmode);
-	mode_ss (entmode, entityss);
-	addr := ent_first (entmode);
-	WHILE ent_get (ent, addr) DO
-		IF ent.enttype = entply THEN
-			result := true;
-			ent.width := ent.width+2;
-			ent_draw (ent, drmode_white);
-		END;
-		addr := ent_next (ent, entmode);
-	END;
-	return result;
-END HighlightEntities;
-}
 
 PROCEDURE HighlightEnt (ent: IN OUT entity; show : boolean; surface : boolean);
 VAR
@@ -939,44 +887,7 @@ BEGIN
 	until false;
 END UserSelectSS;
 
-{
-PROCEDURE GetEntities;
-VAR
-	plyfound	: boolean;
-	svmode		: mode_type;
-BEGIN
-	regen; ! remove any existing hightlighted entities
-	if ss then 
-		highlightsurface;	! re-highlight surface which will have been unhighlighted by the above regen
-	end;
 
-	REPEAT
-		lblsinit;
-		svmode := entmode;
-		res := getmode ('to cast shadows of', entmode, key);
-		IF res = res_escape THEN
-			if key=s0 THEN 
-				if es then
-					entmode := svmode;
-					plyfound := HighlightEntities;	! re-highlight existing selected entities
-				end;
-				return;
-			END;
-		ELSIF res = res_normal THEN
-			! this version of the macro will only cast shadows of polygons,
-			! so check that there is at least 1 polygon in the selection
-			plyfound := HighlightEntities;
-			IF plyfound THEN
-				es := true;
-				return;
-			ELSE
-				msg_OK ('Shadows will only be cast for polygon entities');
-				msg_OK ('Selection must include polygons');
-			END;
-		END;
-	UNTIL false;
-END GetEntities;
-}
 PROCEDURE SetShadSymbolName (symname : IN OUT symstr);
 !!! Create a suitable name for the symbol. Make the name as informative as possible so that useful information is 
 !!! displayed if it is identified in DataCAD.  Also include date/time of creation to ensure name of each shadow is
@@ -1026,40 +937,237 @@ BEGIN
 									  ! (if left in the symbol name these characters will cause the DataCAD drawing to crash)
 END SetShadSymbolName;
 
-{
-PROCEDURE ClipShadow (surfpnt : pntarr; surfnpnt : integer; shadpnt : array of point; shadnpnt : integer);
-TYPE 
-	Intersection = RECORD
-		pnt		: point;
-		sundx	: integer;
-		shndx	: integer;
-	END;
+
+PROCEDURE CreateShadPln (pnts : array of point; npnt : integer; shad : IN OUT entity);
 VAR
-	i, j, k, l		: integer;
-	Intersections : array [1..100] of Intersection;
-	nint					: integer;
-	
+	shadpv			: polyvert;
+	i						: integer;
 BEGIN
-	nint := 0;
-	for i := 1 to shadnpnt do
+		! create a polyline entity with these points
+		if colour > 0 then
+			entclr := colour;
+		end;
+		ent_init (shad, entPln);
+		shad.plnbase := 0.0;
+		shad.plnhite := 0.0;
+		shad.plnclose := true;
+		if colour >= 0 or colour < -1000 then
+			shad.color := entclr;
+		end;
+		ent_add (shad);
+		for i := 1 to npnt do
+			polyvert_init (shadpv);
+			shadpv.shape := pv_vert;
+			shadpv.pnt := pnts[i];
+			polyvert_add (shadpv, shad.plnfrst, shad.plnlast);
+			if colour >= 0 or colour < -1000 then
+				shad.color := entclr;
+			end;
+			ent_update (shad);
+		end;
+END CreateShadPln;
+
+
+FUNCTION CreateTrimmedShad (Shad : array of point; Shadnpnt : integer;
+														Surf : array of point; Surfnpnt : integer;
+														ShadEnt : IN OUT entity) : integer;
+!!! returns 1 when the shadow covers the whole surface
+!!! returns 0 when the shadow covers part of the surface
+!!! returns -1 when no shadow is cast on the surface
+TYPE
+	Side = RECORD
+					p1			: point;
+					p2			: point;
+					used		: boolean;
+				 END;
+VAR
+	sides			: array [1..250] of Side;
+	nsides		: integer;
+	i, j			: integer;
+	m, n			: integer;
+	sidepnts	: pntarr;
+	nsidepnts	: integer;
+	nintersect: integer;
+	pnt				: point;
+	pnts			: array [1..250] of point;
+	npnts			: integer;
+	next		: integer;
+	match			: boolean;
+str				: str255;
+str1			: str80;
+tempent		: entity;
+iterations	: integer;
+
+FUNCTION GetNextSide : boolean;
+VAR
+	SvNext : integer;
+BEGIN
+	SvNext := next;
+	REPEAT
+		next := next+1;
+		if next > nsides then
+			next := 1;
+		end;
+	UNTIL (not sides[next].used) or (next = svnext);
+	return (not sides[next].used);
+END GetNextSide;
+
+
+BEGIN
+	! set up sides based on Shad with any parts outside Surf removed
+	nintersect := 0;
+	nsides := 0;
+	for i := 1 to Shadnpnt do
 		j := i+1;
-		if j > shadnpnt then
+		if j > Shadnpnt then
 			j := 1;
 		end;
-		for k := 1 to surfnpnt do
-			l := k+1;
-			if l > surfnpnt then
-				l := 1;
+
+		nsidepnts := 1;
+		sidepnts[nsidepnts] := Shad[i];
+		for m := 1 to Surfnpnt  do
+			n := m+1;
+			if n > Surfnpnt then
+				n := 1;
 			end;
-			if intrlinlin (shadpnt[i], shadpnt[j], surfpnt[k], surfpnt[l], Intersctions[nint+1].pnt, true) then
-				nint := nint+1;
-				Intersections[nint].sundx := k;
-				Intersections[nint].shndx := i;
+			if intr_linlin (Shad[i], Shad[j], Surf[m], Surf[n], sidepnts[nsidepnts+1], true) then
+				if (not PntsEqual (sidepnts[nsidepnts+1], Shad[j])) and (not PntsEqual (sidepnts[nsidepnts+1], Shad[i])) then
+					nsidepnts := nsidepnts+1;
+				end;
+				nintersect := nintersect+1;
+			end;
+		end;
+		nsidepnts := nsidepnts+1; 
+		sidepnts[nsidepnts] := Shad[j];
+
+		if nsidepnts > 3 then
+			SortPnts (sidepnts, nsidepnts, true);
+		end;
+		! add sides, but only if inside surf
+		for m := 1 to nsidepnts-1 do
+			pnt := sidepnts[m];
+			pnt.x := pnt.x + (sidepnts[m+1].x - sidepnts[m].x)/2.0;
+			pnt.y := pnt.y + (sidepnts[m+1].y - sidepnts[m].y)/2.0;
+			if PntInPly (pnt, Surf, Surfnpnt) >= 0 then
+				nsides := nsides+1;
+				sides[nsides].p1 := sidepnts[m];
+				sides[nsides].p2 := sidepnts[m+1];
+				sides[nsides].used := false;
 			end;
 		end;
 	end;
-END ClipShadow;
-}
+	
+	if nintersect = 0 then
+		! there is no intersection between the shadow and the surface. There are
+		! 3 possibilities as below:
+		if PntInPly (shad[1], Surf, Surfnpnt) = 1 then
+			! shad is completely contained in surf - add shad unaltered
+			CreateShadPln (Shad, shadnpnt, ShadEnt);
+			return 0;
+		elsif PntInPly (Surf[1], Shad, Shadnpnt) = 1 then
+			! Surf is completely contained in Shad - add Surf as Shad
+			CreateShadPln (Surf, Surfnpnt, ShadEnt);
+			return 1;
+		else
+			! no shadow is cast on surface
+			return -1;
+		end;
+	end;
+
+	! set up sides based on Surf with any parts outside Shad removed
+	for i := 1 to Surfnpnt do
+		j := i+1;
+		if j > Surfnpnt then
+			j := 1;
+		end;
+		nsidepnts := 1;
+		sidepnts[nsidepnts] := Surf[i];
+		for m := 1 to Shadnpnt  do
+			n := m+1;
+			if n > Shadnpnt then
+				n := 1;
+			end;
+			if intr_linlin (Surf[i], Surf[j], Shad[m], Shad[n], sidepnts[nsidepnts+1], true) then
+				if (not PntsEqual (sidepnts[nsidepnts+1], Surf[i])) and (not PntsEqual (sidepnts[nsidepnts+1], Surf[j])) then
+					nsidepnts := nsidepnts+1;
+				end;
+			end;
+		end;
+		nsidepnts := nsidepnts+1;
+		sidepnts[nsidepnts] := Surf[j];
+		if nsidepnts > 3 then
+			SortPnts (sidepnts, nsidepnts, true);
+		end;
+		! add sides, but only if inside Shad
+		for m := 1 to nsidepnts-1 do
+			pnt := sidepnts[m];
+			pnt.x := pnt.x + (sidepnts[m+1].x - sidepnts[m].x)/2.0;
+			pnt.y := pnt.y + (sidepnts[m+1].y - sidepnts[m].y)/2.0;
+			if PntInPly (pnt, Shad, Shadnpnt) >= 0 then
+				nsides := nsides+1;
+				sides[nsides].p1 := sidepnts[m];
+				sides[nsides].p2 := sidepnts[m+1];
+				sides[nsides].used:= false;
+			end;
+		end;
+	end;
+
+	! CREATE POLYLINE(s) BASED ON THE LINES IN sides & sides ARRAYS
+	pnts[1] := sides[1].p1;
+	pnts[2] := sides[1].p2;
+	sides[1].used := true;
+	npnts := 2;
+	next:= 2;
+	iterations := 0;
+	REPEAT
+		iterations := iterations+1;
+		match := false;
+		if next > nsides or sides[next].used then
+			! check if any unused sides left ... if not then we are done
+			if not GetNextSide then
+				return 0;
+			end;
+		end;
+
+		if PntsEqual(sides[next].p1, pnts[npnts]) then
+			match := true;
+		elsif PntsEqual (sides[next].p2, pnts[npnts]) then
+			SwapPnts (sides[next].p1, sides[next].p2);		! surface sides could be going opposite direction to shadow sides
+			match := true;
+		end;
+
+		if match then
+			sides[next].used := true;
+			if PntsEqual(Pnts[1], sides[next].p2) then
+				CreateShadPln (pnts, npnts, ShadEnt);
+				if not GetNextSide then
+					return 1;
+				else 
+					Pnts[1] := sides[next].p1;
+					Pnts[2] := sides[next].p2;
+					nPnts := 2;
+				end;
+			else
+				npnts := npnts+1;
+				pnts[npnts] := sides[next].p2;
+			end;
+		end;
+	until not GetNextSide or iterations > 249;
+	
+	if iterations > 249 then
+		! display shadow lines temporarily, but do not save anything to drawing file
+		for i := 1 to nsides do
+			ent_init (tempent, entlin);
+			xformpt (sides[i].p1, invmat, tempent.linpt1);
+			xformpt (sides[i].p2, invmat, tempent.linpt2);
+			tempent.color := clryellow;
+			ent_draw (tempent, drmode_white);
+		end;
+		DisplayVerboseMsg ('Error Occurred trimming shadow. Please advise macro author');
+		return -1;
+	end;
+	return 1;		! shouldn't actually ever get here ...
+END CreateTrimmedShad;
 
 
 PROCEDURE GenShadows;
@@ -1068,7 +1176,7 @@ VAR
 	ent, v_ent		: entity;
 	mod_altitude	: real;
 	tan_altitude	: real;
-	mat, invmat		: modmat;
+!	mat, invmat		: modmat;
 	det				: real;
 	b				: boolean;
 	i, j, k			: integer;
@@ -1080,7 +1188,6 @@ VAR
 	ref				: point;
 	ratio			: real;
 	zpnt			: point;
-	shadpv			: polyvert;
 	shadmode		: mode_type;
 	symname			: symstr;
 	str				: str80;
@@ -1088,12 +1195,14 @@ VAR
 	entmode		: mode_type;
 
 	FUNCTION Cast (castent : IN entity; shad : IN OUT entity) : boolean;
-	!!! calculates shadow for ent and returns the shadow in shad. Returns false
-	!!! if the entity is completely below the surface being cast onto (otherwise
-	!!! creates the entity and returns true.
+	!!! calculates shadow for ent and returns the shadow in shad. 
+	!!! If the shadow is trimmed to a polygon, then it is possible that more than 1 shadow
+	!!! polyline will be created. In this case shad is the most recently created polyline.
+	!!! Returns false if no shadow cast on the shadow polygon (otherwise returns true).
 	VAR
 		below		: boolean;	! flag used to indicate if any points are below the surface plane
 		abovepnt	: integer;	! index of the first point that is above the surface
+		surfacepnts : pntarr;
 	BEGIN
 		!set up points as being the points of castent with the modelling matrix applied
 		npoints := castent.plyNpnt;
@@ -1165,19 +1274,19 @@ VAR
 			points[i].x := points[i].x - points[i].z/tan_altitude;		! calculate shadow x based on z hight and modified sun altitude. 
 			points[i].z := 0.0;
 		end;
-		
-		! create a polyline entity with these points
-		ent_init (shad, entPln);
-		shad.plnbase := 0.0;
-		shad.plnhite := 0.0;
-		shad.plnclose := true;
-		ent_add (shad);
-		for i := 1 to npoints do
-			polyvert_init (shadpv);
-			shadpv.shape := pv_vert;
-			shadpv.pnt := points[i];
-			polyvert_add (shadpv, shad.plnfrst, shad.plnlast);
-			ent_update (shad);
+
+		! Apply matrix to surface points
+		for i := 1 to surface.plynpnt do
+			xformpt (surface.plyPnt[i], mat, surfacepnts[i]);
+		end;
+
+		! create polyline entity(s) with these points
+		if trim then
+			if CreateTrimmedShad (points, npoints, surfacepnts, surface.plynpnt, shad) = -1 then
+				return false;
+			end;
+		else
+			CreateShadPln (points, npoints, shad);
 		end;
 
 		return true;
@@ -1223,6 +1332,7 @@ BEGIN
 	addr := ent_first (entmode);
 	WHILE ent_get (ent, addr) DO
 		IF ent.enttype = entply THEN		! we are only processing polygons ... ignore any other entities
+			entclr := ent.color;
 			IF Cast (ent, shadow) THEN
 				shadowcreated := shadowcreated+1;
 
@@ -1298,15 +1408,38 @@ BEGIN
 	view_setcurr (view, true);
 	HighlightSurface;
 	HighlightSS (entityss, true, false);
-
 END SunsEye;
 
+PROCEDURE SaveClr;
+BEGIN
+	if atr_sysfind ('ShadColour', atr) then
+		atr.int := colour;
+		atr_update (atr);
+	else
+		atr_init (atr, atr_int);
+		atr.name := 'ShadColour';
+		atr.int := colour;
+		atr_add2sys (atr);
+	end;
+END SaveClr;
+
+PROCEDURE GetSpecColour;
+BEGIN
+	colour := absi(colour);
+	if colour > 1000 then
+		colour := colour - 1000;
+	end;
+	repeat
+		getclr (colour);
+	until colour > 0 and colour < 256;
+	SaveClr;
+END GetSpecColour;
 
 PROCEDURE Initialise;
 VAR
 	i	: integer;
 BEGIN
-	namever :='Shadow v0.3   Copyright D Henderson 2017.';
+	namever :='Shadow v0.4   Copyright D Henderson 2017.';
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
 	
@@ -1336,7 +1469,7 @@ BEGIN
 		azimuth := 0.0;
 	end;
 
-	! if there is not an existing 'ShadAltitude' attribute in the drawing, then defalt to halfpi
+	! if there is not an existing 'ShadAltitude' attribute in the drawing, then default to halfpi
 	if atr_sysfind ('ShadAltitude', atr) then
 		altitude := atr.ang;
 		! set sunposmsg if there is an existing attribute in the drawing
@@ -1346,6 +1479,28 @@ BEGIN
 		end;
 	else
 		altitude := halfpi;
+	end;
+
+	! if there is not an existing 'ShadColour' attribute in the drawing, then default to -1
+	if atr_sysfind ('ShadColour', atr) then
+		colour := atr.int;
+	else
+		colour := -1;
+		atr_init (atr, atr_int);
+		atr.name := 'ShadColour';
+		atr.int := colour;
+		atr_add2sys (atr);
+	end;
+
+	! if there is not an existing 'ShadTrim' attribute in the drawing, then default to true
+	if atr_sysfind ('ShadTrim', atr) then
+		trim := atr.int <> 0;
+	else
+		trim := true;
+		atr_init (atr, atr_int);
+		atr.name := 'ShadTrim';
+		atr.int := 1;
+		atr_add2sys (atr);
 	end;
 
 	! check if a surface polygon has previously been selected for this drawing
@@ -1385,18 +1540,37 @@ BEGIN
 		strcat (str, ')');
 		lblmsg (2, str);
 		
-		lblset (4, 'Sun-eye view');
-		lblmsg (4, 'Set viewing projection to view from the sun position');
+		lblset (3, 'Sun-eye view');
+		lblmsg (3, 'Set viewing projection to view from the sun position');
 		
-		lblset (8, 'Entities');
-		lblmsg (8, 'Select entities to cast shadows');
+		lblset (5, 'Entities');
+		lblmsg (5, 'Select entities to cast shadows');
 		
-		lblset (10, 'Surface');
-		lblmsg (10, 'Select polygon to define surface shadows are cast onto');
+		lblset (7, 'Surface');
+		lblmsg (7, 'Select polygon to define surface shadows are cast onto');
 		
-		lblset (15, 'Start');
-		lblmsg (15, 'Generate shadows for selected entities');
+		lblsett (8, 'Trim Shadow', trim);
+		lblmsg (8, 'Trim Shadow to surface polygon');
 		
+		lblsett (13, 'Spec Clr', colour >= 0);
+		tempstr := 'Specify a colour to draw shadows';
+		if colour > 0 then
+			clrGetName (colour, str);
+			strcat (tempstr, ' (');
+			strcat (tempstr, str);
+			strcat (tempstr, ')');
+		end;
+		lblmsg (13, tempstr);
+		
+		lblsett (14, 'Curr Clr', colour < 0 and colour > -1000);
+		lblmsg (14, 'Shadows will be drawn in the current colour');
+		
+		lblsett (15, 'Ent Clr', colour < -1000);
+		lblmsg (15, 'Shadow will be drawn the same colour as the entity casting it');
+
+		lblset (18, 'Start');
+		lblmsg (18, 'Generate shadows for selected entities');
+
 		lblset (20, 'Exit');
 		
 		lblson;
@@ -1406,13 +1580,37 @@ BEGIN
 			GetNorth;
 		ELSIF key=f2 THEN
 			GetSunPos;
-		ELSIF key = f4 THEN
+		ELSIF key = f3 THEN
 			SunsEye;
-		ELSIF key = f8 THEN
+		ELSIF key = f5 THEN
 			UserSelectSS;
-		ELSIF key = f0 THEN
+		ELSIF key = f7 THEN
 			GetSurface;
+		ELSIF key = f8 THEN
+			trim := not trim;
+			if atr_sysfind ('ShadTrim', atr) then
+				if trim then
+					atr.int := 1;
+				else
+					atr.int := 0;
+				end;
+				atr_update (atr);
+			end;
+		ELSIF key = s3 THEN
+			GetSpecColour;
+		ELSIF key = s4 THEN
+			colour := -absi(colour);
+			if colour < -1000 then
+				colour := colour+1000;
+			end;
+			SaveClr;
 		ELSIF key = s5 THEN
+			colour := -absi(colour);
+			if colour > -1000 then
+				colour := colour-1000;
+			end;
+			SaveClr;
+		ELSIF key = s8 THEN
 			GenShadows;
 		ELSIF key = s0 THEN
 			done := true;
