@@ -72,6 +72,9 @@ mat, invmat		: modmat;
 	colour		: integer;
 	entclr		: integer;
 	trim			: boolean;
+	lyrname		: str8;
+	lyr				: layer;
+	svlyr			: layer;
 	
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
 FUNCTION msg_dlg (msg : str255; msgDlgType, msgDlgButtons : integer) : integer; BUILTIN 246;
@@ -824,6 +827,7 @@ var
 	ent			: entity;
 BEGIN
 	repeat
+		wrtlvl ('Shadow Entities');
 		lblsinit;
 		for i := 0 to 7 do
 			ssGetName (i, name);
@@ -1324,6 +1328,11 @@ BEGIN
 	end;
 	tan_altitude := tan (mod_altitude);
 	
+	svlyr := getlyrcurr;
+	if strlen(lyrname) > 0 then
+		lyr_set (lyr);
+	end;
+
 	! now step through the entities and create a shadow entity for each
 	stopgroup;	! start a new group for the shadow entites
 	shadowcreated := 0;
@@ -1374,6 +1383,8 @@ BEGIN
 	else
 		msg_OK ('No shadows cast on this surface by entity(s)');
 	end;
+	lyr_set (svlyr);
+
 END GenShadows;
 
 PROCEDURE SunsEye;
@@ -1434,6 +1445,26 @@ BEGIN
 	until colour > 0 and colour < 256;
 	SaveClr;
 END GetSpecColour;
+
+PROCEDURE GetShadowLyr;
+BEGIN
+	if strlen(lyrname) > 0 then
+		lyrname := '';
+		return;
+	end;
+	lblsinit;
+	wrtmsg ('Enter layer to create shadows on: ');
+	getstr (lyrname, 8);
+	if strlen(lyrname) = 0 then
+		return;
+	end;
+	if not lyr_find (lyrname, lyr) then
+		if not lyr_create (lyrname, lyr) then
+			msg_OK ('Unable to find or create layer');
+			lyrname := '';
+		end;
+	end;
+END GetShadowLyr;
 
 PROCEDURE Initialise;
 VAR
@@ -1567,6 +1598,16 @@ BEGIN
 		
 		lblsett (15, 'Ent Clr', colour < -1000);
 		lblmsg (15, 'Shadow will be drawn the same colour as the entity casting it');
+		
+		lblsett (16, 'Layer', strlen(lyrname) > 0);
+		tempstr := 'Lyr to draw shadows on (';
+		if strlen (lyrname) > 0 then
+			strcat (tempstr, lyrname);
+		else
+			strcat (tempstr, 'currently not set');
+		end;
+		strcat (tempstr, ')');
+		lblmsg (16, tempstr);
 
 		lblset (18, 'Start');
 		lblmsg (18, 'Generate shadows for selected entities');
@@ -1610,6 +1651,8 @@ BEGIN
 				colour := colour-1000;
 			end;
 			SaveClr;
+		ELSIF key = s6 THEN
+			GetShadowLyr;
 		ELSIF key = s8 THEN
 			GenShadows;
 		ELSIF key = s0 THEN
