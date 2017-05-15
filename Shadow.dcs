@@ -39,9 +39,13 @@ PROGRAM Shadow;
 
 # INCLUDE '..\\..\\Inc\\_pline.inc'
 # INCLUDE '..\\..\\Inc\\_misc.inc'
+# INCLUDE '..\\..\\Inc\\_hatch.inc'
+
 # INCLUDE 'pntutil.inc'
 # INCLUDE 'Errutil.inc'
 
+CONST
+   ssNum  = 11;
 
 VAR
 	namever		: string(100);
@@ -75,6 +79,13 @@ mat, invmat		: modmat;
 	lyrname		: str8;
 	lyr				: layer;
 	svlyr			: layer;
+	hatch			: boolean;
+	hatchlines: integer;
+	hatchspace: real;
+	hatchclr	: integer;
+	hmin, hmax, hmin1, hmax1	: point;
+	extent1		: boolean;
+
 	
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
 FUNCTION msg_dlg (msg : str255; msgDlgType, msgDlgButtons : integer) : integer; BUILTIN 246;
@@ -947,28 +958,46 @@ VAR
 	shadpv			: polyvert;
 	i						: integer;
 BEGIN
-		! create a polyline entity with these points
-		if colour > 0 then
-			entclr := colour;
-		end;
-		ent_init (shad, entPln);
-		shad.plnbase := 0.0;
-		shad.plnhite := 0.0;
-		shad.plnclose := true;
+	if npnt < 3 then
+		return;
+	end;
+  
+	! create a polyline entity with these points
+	if colour > 0 then
+		entclr := colour;
+	end;
+	ent_init (shad, entPln);
+	shad.plnbase := 0.0;
+	shad.plnhite := 0.0;
+	shad.plnclose := true;
+	if colour >= 0 or colour < -1000 then
+		shad.color := entclr;
+	end;
+	ent_add (shad);
+	for i := 1 to npnt do
+		polyvert_init (shadpv);
+		shadpv.shape := pv_vert;
+		shadpv.pnt := pnts[i];
+		polyvert_add (shadpv, shad.plnfrst, shad.plnlast);
 		if colour >= 0 or colour < -1000 then
 			shad.color := entclr;
 		end;
-		ent_add (shad);
-		for i := 1 to npnt do
-			polyvert_init (shadpv);
-			shadpv.shape := pv_vert;
-			shadpv.pnt := pnts[i];
-			polyvert_add (shadpv, shad.plnfrst, shad.plnlast);
-			if colour >= 0 or colour < -1000 then
-				shad.color := entclr;
-			end;
-			ent_update (shad);
-		end;
+		ent_update (shad);
+	end;
+	ssAdd (ssNum, shad);
+	
+	if extent1 then
+		ent_extent (shad, hmin, hmax);
+		extent1 := false;
+	else
+		ent_extent (shad, hmin1, hmax1);
+		hmin.x := min (hmin.x, hmin1.x);
+		hmin.y := min (hmin.y, hmin1.y);
+		hmin.z := min (hmin.z, hmin1.z);
+		hmax.x := max (hmax1.x, hmax.x);
+		hmax.y := max (hmax1.y, hmax.y);
+		hmax.z := max (hmax1.z, hmax.z);
+	end;
 END CreateShadPln;
 
 
@@ -1197,6 +1226,8 @@ VAR
 	str				: str80;
 	shadowcreated	: integer;
 	entmode		: mode_type;
+	sl        : scanLineType;
+	tempent		: entity;
 
 	FUNCTION Cast (castent : IN entity; shad : IN OUT entity) : boolean;
 	!!! calculates shadow for ent and returns the shadow in shad. 
@@ -1331,6 +1362,8 @@ BEGIN
 	svlyr := getlyrcurr;
 	if strlen(lyrname) > 0 then
 		lyr_set (lyr);
+	else
+		lyr := svlyr;
 	end;
 
 	! now step through the entities and create a shadow entity for each
@@ -1341,18 +1374,40 @@ BEGIN
 	addr := ent_first (entmode);
 	WHILE ent_get (ent, addr) DO
 		IF ent.enttype = entply THEN		! we are only processing polygons ... ignore any other entities
+			extent1 := true;
 			entclr := ent.color;
+			ssClear (ssNum);
 			IF Cast (ent, shadow) THEN
 				shadowcreated := shadowcreated+1;
-
+!				ent_extent (shadow, hmin, hmax);
 				! process any voids
 				v_addr := ent.plyfrstvoid;
 				WHILE void_get (v_ent, v_addr) DO
 					b := Cast (v_ent, v_shad);
 					v_addr := v_ent.next;
 				END;
-
 			END;
+			
+			if hatch then
+				! Add Hatch
+				mode_init (mode);
+				mode_ss (mode, ssNum);
+				for i := 1 to hatchlines do
+					!sl.ang := 0.0 + (float(i)-1.0)*pi/float(hatchlines);
+					if i = 1 then
+						sl.ang := 0.0;
+					else
+						sl.ang := halfpi;
+					end;
+					setpoint (sl.origin, 0.0);
+					sl.delta.x := 0.0;
+					sl.delta.y := hatchspace;
+					sl.numdash := 0;
+					j := 0;
+					hatch_mode (mode, sl, 0.0, 0.0, origin, 0.0, 1.0, htype_normal, lyr, hmin, hmax, false, j, false);
+				end;
+			end;
+			ssClear (ssNum);
 		END;
 		addr := ent_next (ent, entmode);
 	END;
@@ -1465,6 +1520,56 @@ BEGIN
 		end;
 	end;
 END GetShadowLyr;
+
+PROCEDURE HatchSettings;
+BEGIN
+	hatch := not hatch;
+	if hatch then
+		repeat
+			lblsinit;
+			wrtlvl ('Hatch Settings');
+			lblset (1, 'Spacing');
+			cvdisst (hatchspace, tempstr);
+			strins (tempstr, 'Set spacing between hatch lines (', 1);
+			strcat (tempstr, ')');
+			lblmsg (1, tempstr);
+			lblsett (2, 'Single Line', hatchlines = 1);
+			lblmsg (2, 'Hatch with a single set of parallel lines');
+			lblsett (3, 'Cross Hatch', hatchlines = 2);
+			lblmsg (3, 'Hatch with 2 sets of parallel lines at right angles to each other');
+			lblsett (5, 'Line Clr', hatchclr=0);
+			lblmsg (5, 'Hatch the same colour as the shadow outlines');
+			lblsett (6, 'Set Clr', hatchclr > 0);
+			if hatchclr > 0 then
+				clrGetName (hatchclr, tempstr);
+				strins (tempstr, 'Set hatch colour (', 1);
+				strcat (tempstr, ')');
+			else
+				tempstr := 'Set hatch colour';
+			end;
+			lblmsg (6, tempstr);
+			lblset (20, 'Exit');
+			lblson;
+			
+			getesc (key);
+			if key = f1 then
+				wrtmsg ('Enter hatch spacing: ');
+				getdis (hatchspace);
+				wrtmsg ('');
+			elsif key = f2 then
+				hatchlines := 1;
+			elsif key = f3 then
+				hatchlines := 2;
+			elsif key = f5 then
+				hatchclr := 0;
+			elsif key = f6 then
+				getclr (hatchclr);
+			elsif key = s0 then
+				return;
+			end;
+		until false;
+	end;
+END HatchSettings;
 
 PROCEDURE Initialise;
 VAR
@@ -1583,6 +1688,9 @@ BEGIN
 		lblsett (8, 'Trim Shadow', trim);
 		lblmsg (8, 'Trim Shadow to surface polygon');
 		
+		lblsett (10, 'Hatch', hatch);
+		lblmsg (10, 'Hatch the shadows');
+		
 		lblsett (13, 'Spec Clr', colour >= 0);
 		tempstr := 'Specify a colour to draw shadows';
 		if colour > 0 then
@@ -1637,6 +1745,8 @@ BEGIN
 				end;
 				atr_update (atr);
 			end;
+		ELSIF key = f0 THEN
+			HatchSettings;
 		ELSIF key = s3 THEN
 			GetSpecColour;
 		ELSIF key = s4 THEN
