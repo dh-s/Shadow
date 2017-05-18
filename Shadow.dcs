@@ -4,16 +4,21 @@
 ! This software is distributed free of charge and without warranty. You may distribute it to  !
 ! others provided that you do so free of charge.                                              !
 !                                                                                             !
-! This source code should always be distributed together with the compiled macro (dcx file).  !
+! This document should always be distributed together with the compiled macro (dcx file). The !
+! source code should always be either distributed with the compiled macro or made freely      !
+! available to those who receive the macro.                                                   !
 !                                                                                             !
 ! You may modify this software for your own use without limitation.  If you convey a copy of  !
 ! the modified software to others, you may only do so under the following conditions:         !
-!  1. You convey your source code together with the compiled macro (dcx file).                !
-!  2. You leave this notice intact.  You should add an additional notice regarding your       !
-!     changes, provided it does not in any way limit or modify the intention of this notice.  !
+!  1. You either convey your source code (dcs file) together with the compiled macro (dcx     !
+!     file), or else you make the source code freely available to those who receive the macro.!
+!  2. You convey this document together with the compiled macro, and leave this notice intact.!
+!     You should add an additional notice regarding your  changes, provided it does not in any!
+!     way limit or modify the intention of this notice.                                       !
 !  3. The original copyright remains, together with a notice of the modification and the name !
 !     of the person(s) who made the modification.                                             !
-!  4. You do not charge for the software (including not charging for any distribution media). !
+!  4. You do not charge for the software (including not charging for any distribution media   !
+!     unless explicit permission has been obtained from the author).                          !
 !  5. You allow your modified software to be freely distributed by others.                    !
 !  6. You update the version number to indicate that it is your modification. Appending your  !
 !     initials to the original version number would be adequate for this purpose, potentially !
@@ -43,6 +48,8 @@ PROGRAM Shadow;
 
 # INCLUDE 'pntutil.inc'
 # INCLUDE 'Errutil.inc'
+# INCLUDE 'Settings.inc'
+# INCLUDE 'StrUtil.inc'
 
 CONST
    ssNum  = 11;
@@ -53,7 +60,7 @@ mat, invmat		: modmat;
 	north		: real;
 	altitude    : real;
 	azimuth		: real;
-	sunposmsg	: string(16);
+	sunposmsg	: str80;
 	
 	surface		: entity;
 	
@@ -66,7 +73,7 @@ mat, invmat		: modmat;
 	str, str1	: string(64);
 	done		: boolean;
 
-	surfacess	: integer;
+	!surfacess	: integer;
 	entityss	: integer;
 	ss		: boolean;	! flags to indicate if a surface & entities have been selected
 	
@@ -79,10 +86,11 @@ mat, invmat		: modmat;
 	lyrname		: str8;
 	lyr				: layer;
 	svlyr			: layer;
-	hatch			: boolean;
-	hatchlines: integer;
+!	hatch			: boolean;
+	hatchlines: integer;		!0 = No Hatch,  1 = parralel lines,  2 =CrossHatch
 	hatchspace: real;
 	hatchclr	: integer;
+	hatchang	: real;
 	hmin, hmax, hmin1, hmax1	: point;
 	extent1		: boolean;
 
@@ -171,32 +179,6 @@ BEGIN
 	SaveNorth;
 END GetNorth;
 
-PROCEDURE SaveSunposmsg;
-BEGIN
-	if atr_sysfind ('ShadSunPosMg', atr) then
-		strassign (atr.str, sunposmsg);
-		atr_update (atr);
-	else
-		atr_init (atr, atr_str);
-		atr.name := 'ShadSunPosMg';
-		strassign (atr.str, sunposmsg);
-		atr_add2sys (atr);
-	end;
-END SaveSunposmsg;
-
-PROCEDURE SaveAzimuth;
-BEGIN
-	if atr_sysfind ('Shad_Azimuth', atr) then
-		atr.ang := azimuth;
-		atr_update (atr);
-	else
-		atr_init (atr, atr_ang);
-		atr.name := 'Shad_Azimuth';
-		atr.ang := azimuth;
-		atr_add2sys (atr);
-	end;
-END SaveAzimuth;
-
 PROCEDURE GetAzimuth;
 VAR
 	ang			: real;
@@ -211,26 +193,13 @@ BEGIN
 	IF result = res_normal THEN
 		if azimuth <> ang then
 			sunposmsg := '';	! azimuth has been changed, so clear any msg about a saved setting
-			SaveSunposmsg;
+			SaveStr ('ShadSunPosMg', sunposmsg, false);
 		end;
 		azimuth := ang;
-		SaveAzimuth;
+		SaveAng ('Shad_Azimuth', azimuth, false);
 	END;
 	wrtmsg('');
 END GetAzimuth;
-
-PROCEDURE SaveAltitude;
-BEGIN
-	if atr_sysfind ('ShadAltitude', atr) then
-		atr.ang := altitude;
-		atr_update (atr);
-	else
-		atr_init (atr, atr_ang);
-		atr.name := 'ShadAltitude';
-		atr.ang := altitude;
-		atr_add2sys (atr);
-	end;
-END SaveAltitude;
 
 PROCEDURE GetAltitude;
 VAR
@@ -246,10 +215,10 @@ BEGIN
 	IF result = res_normal THEN
 		if altitude <> ang then
 			sunposmsg := '';	! altitude has been changed, so clear any msg about a saved setting
-			SaveSunposmsg;
+			SaveStr ('ShadSunPosMg', sunposmsg, false);
 		end;
 		altitude := ang;
-		SaveAltitude;
+		SaveAng ('ShadAltitude', altitude, false);
 	END;
 	wrtmsg('');
 END GetAltitude;
@@ -371,7 +340,7 @@ BEGIN
 	IF NOT DisplayFileError (res, 'closing file') THEN
 		wrtmsg ('Sun Postion saved');
 		strassign (sunposmsg, lbl);
-		SaveSunposmsg;
+		SaveStr ('ShadSunPosMg', sunposmsg, false);
 	END;
 END SaveSunPos;
 
@@ -470,9 +439,9 @@ VAR
 		azimuth := Saved[ndx, 1];
 		altitude := Saved[ndx, 2];
 		strassign (sunposmsg, savedlbl[ndx]);  
-		SaveAltitude;
-		SaveAzimuth;
-		SaveSunposmsg;
+		SaveAng ('ShadAltitude', altitude, false);
+		SaveAng ('Shad_Azimuth', azimuth, false);
+		SaveStr ('ShadSunPosMg', sunposmsg, false);
 	END GetSaved;
 	
 BEGIN
@@ -844,15 +813,15 @@ BEGIN
 			ssGetName (i, name);
 			lblsett (i+1, name, i=entityss);
 		end;
-		if entityss > 0 then
+		if entityss >= 0 then
 			lblset (12, 'Add To Set');
 			lblmsg (12, 'Add entities to selection set');
-			lblset (13, 'Del From Set');
+			lblset (13, 'Del Frm Set');
 			lblmsg (13, 'Remove entities from selection set');
 			lblset (14, 'Clear Set');
 			lblmsg (14, 'Clear selection set');
 			lblset (15, 'Rename');
-			lblmsg (15, 'Rename Selection Set to \'ShadEnts\'');
+			lblmsg (15, 'Rename Selection Set');
 		end;
 		lblset (20, 'Exit');
 		wrtmsg ('Choose Selection Set to use for Shadow Entities');
@@ -863,18 +832,29 @@ BEGIN
 		elsif key >= f1 and key <= f8 then
 			key := key-f1;
 			if key=entityss then
-				HighlightSS (entityss, false, false);
-				entityss := -1;
+				HighlightSS (entityss, true, false);
 			else
 				HighlightSS (entityss, false, false);
 				entityss := key;
 				HighlightSS (entityss, true, false);
 			end;
+			SaveInt ('ShadEntSlSet', entityss, false);
 		elsif (key = s4) and (entityss > 0) then
 			HighlightSS (entityss, false, false);
 			ssClear (entityss);
 		elsif (key = s5) and (entityss > 0) then
-			ssSetName (entityss, 'ShadEnts');
+			lblsinit;
+			lblson;
+			ssGetName (entityss, tempstr);
+			strins (tempstr, 'Enter new name for \'', 1);
+			strcat (tempstr, '\':');
+			wrtmsg (tempstr);
+			ssGetName (entityss, tempstr);
+			getstr (tempstr, 12);
+			if not BlankString(tempstr) then
+				ssSetName (entityss, tempstr);
+			end;
+			wrtmsg('');
 		elsif (key = s2) and (entityss > 0) then
 			i := getmode ('add to Selection Set', ssmode, key);
 			if i = res_normal then
@@ -1026,15 +1006,16 @@ VAR
 	npnts			: integer;
 	next		: integer;
 	match			: boolean;
-str				: str255;
-str1			: str80;
-tempent		: entity;
-iterations	: integer;
+	tempent		: entity;
+	iterations	: integer;
 
 FUNCTION GetNextSide : boolean;
 VAR
 	SvNext : integer;
 BEGIN
+	if nsides < 2 then
+		return false;
+	end;
 	SvNext := next;
 	REPEAT
 		next := next+1;
@@ -1089,7 +1070,7 @@ BEGIN
 			end;
 		end;
 	end;
-	
+
 	if nintersect = 0 then
 		! there is no intersection between the shadow and the surface. There are
 		! 3 possibilities as below:
@@ -1106,7 +1087,6 @@ BEGIN
 			return -1;
 		end;
 	end;
-
 	! set up sides based on Surf with any parts outside Shad removed
 	for i := 1 to Surfnpnt do
 		j := i+1;
@@ -1126,11 +1106,13 @@ BEGIN
 				end;
 			end;
 		end;
+
 		nsidepnts := nsidepnts+1;
 		sidepnts[nsidepnts] := Surf[j];
 		if nsidepnts > 3 then
 			SortPnts (sidepnts, nsidepnts, true);
 		end;
+
 		! add sides, but only if inside Shad
 		for m := 1 to nsidepnts-1 do
 			pnt := sidepnts[m];
@@ -1146,6 +1128,9 @@ BEGIN
 	end;
 
 	! CREATE POLYLINE(s) BASED ON THE LINES IN sides & sides ARRAYS
+	if nsides < 2 then
+		return -1;
+	end;
 	pnts[1] := sides[1].p1;
 	pnts[2] := sides[1].p2;
 	sides[1].used := true;
@@ -1194,9 +1179,9 @@ BEGIN
 			xformpt (sides[i].p1, invmat, tempent.linpt1);
 			xformpt (sides[i].p2, invmat, tempent.linpt2);
 			tempent.color := clryellow;
-			ent_draw (tempent, drmode_white);
+			ent_draw_dl (tempent, drmode_white, true);
 		end;
-		DisplayVerboseMsg ('Error Occurred trimming shadow. Please advise macro author');
+		DisplayVerboseMsg (1);
 		return -1;
 	end;
 	return 1;		! shouldn't actually ever get here ...
@@ -1209,7 +1194,6 @@ VAR
 	ent, v_ent		: entity;
 	mod_altitude	: real;
 	tan_altitude	: real;
-!	mat, invmat		: modmat;
 	det				: real;
 	b				: boolean;
 	i, j, k			: integer;
@@ -1239,6 +1223,10 @@ VAR
 		abovepnt	: integer;	! index of the first point that is above the surface
 		surfacepnts : pntarr;
 	BEGIN
+		! do not cast a shadow for the surface if it is also in the entity set
+		if castent.addr = shadow.addr then
+			return false;
+		end;
 		!set up points as being the points of castent with the modelling matrix applied
 		npoints := castent.plyNpnt;
 		below := false;
@@ -1373,7 +1361,7 @@ BEGIN
 	mode_ss (entmode, entityss);
 	addr := ent_first (entmode);
 	WHILE ent_get (ent, addr) DO
-		IF ent.enttype = entply THEN		! we are only processing polygons ... ignore any other entities
+		IF ent.enttype = entply and ent.addr <> surface.addr THEN		! we are only processing polygons ... ignore any other entities
 			extent1 := true;
 			entclr := ent.color;
 			ssClear (ssNum);
@@ -1388,16 +1376,16 @@ BEGIN
 				END;
 			END;
 			
-			if hatch then
+			if hatchlines > 0 then
 				! Add Hatch
 				mode_init (mode);
 				mode_ss (mode, ssNum);
 				for i := 1 to hatchlines do
 					!sl.ang := 0.0 + (float(i)-1.0)*pi/float(hatchlines);
 					if i = 1 then
-						sl.ang := 0.0;
+						sl.ang := 0.0 + hatchang;
 					else
-						sl.ang := halfpi;
+						sl.ang := halfpi + hatchang;
 					end;
 					setpoint (sl.origin, 0.0);
 					sl.delta.x := 0.0;
@@ -1411,9 +1399,29 @@ BEGIN
 		END;
 		addr := ent_next (ent, entmode);
 	END;
+
 	stopgroup;	! stop the group for shadow entites
 
 	if shadowcreated > 0 then
+		! update hatch entities
+		if hatchlines > 0 then
+			mode_init (mode);
+			mode_group (mode, shadow);
+			mode_enttype (mode, entlin);
+			addr := ent_first (mode);
+			while ent_get (ent, addr) do
+				ent.attr := 1;
+				if hatchclr >= 0 then
+					ent.color := hatchclr;
+				else
+					ent.color:= shadow.color;
+				end;
+				ent_update (ent);
+				ent_draw (ent, drmode_black);
+				addr := ent_next (ent, mode);
+			end;
+		end;
+
 		! create a symbol to contain all the shadows that are currently transformed by mat
 		! (the symbol itself will be rotated back into position using invmat once it is inserted)
 		SetShadSymbolName (symname);
@@ -1435,6 +1443,7 @@ BEGIN
 			strcat (str, ' entities.');
 		end;
 		wrterr (str);
+
 	else
 		msg_OK ('No shadows cast on this surface by entity(s)');
 	end;
@@ -1476,18 +1485,6 @@ BEGIN
 	HighlightSS (entityss, true, false);
 END SunsEye;
 
-PROCEDURE SaveClr;
-BEGIN
-	if atr_sysfind ('ShadColour', atr) then
-		atr.int := colour;
-		atr_update (atr);
-	else
-		atr_init (atr, atr_int);
-		atr.name := 'ShadColour';
-		atr.int := colour;
-		atr_add2sys (atr);
-	end;
-END SaveClr;
 
 PROCEDURE GetSpecColour;
 BEGIN
@@ -1497,8 +1494,9 @@ BEGIN
 	end;
 	repeat
 		getclr (colour);
+		wrterr ('');
 	until colour > 0 and colour < 256;
-	SaveClr;
+	SaveInt ('ShadColour', colour, true);
 END GetSpecColour;
 
 PROCEDURE GetShadowLyr;
@@ -1508,9 +1506,11 @@ BEGIN
 		return;
 	end;
 	lblsinit;
+	lblson;
 	wrtmsg ('Enter layer to create shadows on: ');
 	getstr (lyrname, 8);
-	if strlen(lyrname) = 0 then
+	if blankstring(lyrname) then
+		lyrname := '';
 		return;
 	end;
 	if not lyr_find (lyrname, lyr) then
@@ -1523,121 +1523,102 @@ END GetShadowLyr;
 
 PROCEDURE HatchSettings;
 BEGIN
-	hatch := not hatch;
-	if hatch then
-		repeat
-			lblsinit;
-			wrtlvl ('Hatch Settings');
-			lblset (1, 'Spacing');
-			cvdisst (hatchspace, tempstr);
-			strins (tempstr, 'Set spacing between hatch lines (', 1);
+	repeat
+		SaveInt ('ShadHatchClr', hatchclr, true);
+		lblsinit;
+		wrtlvl ('Hatch Settings');
+		lblsett (1, 'No Hatch', hatchlines = 0);
+		lblmsg (1, 'Shadows will not be hatched');
+		lblsett (2, 'Single Line', hatchlines = 1);
+		lblmsg (2, 'Hatch with a single set of parallel lines');
+		lblsett (3, 'Cross Hatch', hatchlines = 2);
+		lblmsg (3, 'Hatch with 2 sets of parallel lines at right angles to each other');
+		lblsett (9, 'Outln Clr', hatchclr < 0);
+		lblmsg (9, 'Hatch the same colour as the shadow outlines');
+		lblsett (10, 'Set Clr', hatchclr >= 0);
+		if hatchclr >= 0 then
+			clrGetName (hatchclr, tempstr);
+			strins (tempstr, 'Set hatch colour (', 1);
 			strcat (tempstr, ')');
-			lblmsg (1, tempstr);
-			lblsett (2, 'Single Line', hatchlines = 1);
-			lblmsg (2, 'Hatch with a single set of parallel lines');
-			lblsett (3, 'Cross Hatch', hatchlines = 2);
-			lblmsg (3, 'Hatch with 2 sets of parallel lines at right angles to each other');
-			lblsett (5, 'Line Clr', hatchclr=0);
-			lblmsg (5, 'Hatch the same colour as the shadow outlines');
-			lblsett (6, 'Set Clr', hatchclr > 0);
-			if hatchclr > 0 then
-				clrGetName (hatchclr, tempstr);
-				strins (tempstr, 'Set hatch colour (', 1);
-				strcat (tempstr, ')');
-			else
-				tempstr := 'Set hatch colour';
-			end;
-			lblmsg (6, tempstr);
-			lblset (20, 'Exit');
-			lblson;
-			
-			getesc (key);
-			if key = f1 then
-				wrtmsg ('Enter hatch spacing: ');
-				getdis (hatchspace);
-				wrtmsg ('');
-			elsif key = f2 then
-				hatchlines := 1;
-			elsif key = f3 then
-				hatchlines := 2;
-			elsif key = f5 then
-				hatchclr := 0;
-			elsif key = f6 then
-				getclr (hatchclr);
-			elsif key = s0 then
-				return;
-			end;
-		until false;
-	end;
+		else
+			tempstr := 'Set hatch colour';
+		end;
+		lblmsg (10, tempstr);
+		
+		lblset (12, 'Spacing');
+		cvdisst (hatchspace, tempstr);
+		strins (tempstr, 'Set spacing between hatch lines (', 1);
+		strcat (tempstr, ')');
+		lblmsg (12, tempstr);
+		lblset (13, 'Angle');
+		cvangst (hatchang, tempstr);
+		strins (tempstr, 'Hatch angle relative to suns rays (', 1);
+		strcat (tempstr, ')');
+		lblmsg (13, tempstr);
+		
+		lblset (20, 'Exit');
+		lblson;
+		
+		getesc (key);
+		if (key >= f1)and (key <= F3) then
+			hatchlines := key-f1;
+			SaveInt ('ShadHtchLins', hatchlines, true);
+		elsif key = f9 then
+			hatchclr := -absi(hatchclr);
+		elsif key = f0 then
+			hatchclr := absi(hatchclr);
+			getclr (hatchclr);
+		elsif key = s2 then
+			wrtmsg ('Enter hatch spacing: ');
+			getdis (hatchspace);
+			wrtmsg ('');
+			SaveRl ('ShadHtchSpcg', hatchspace, true);
+		elsif key = s3 then
+			wrtmsg ('Enter hatch angle (relative to suns rays): ');
+			getang (hatchang);
+			wrtmsg ('');
+			SaveRl ('ShadHtchAngl', hatchspace, true);
+		elsif key = s0 then
+			return;
+		end;
+	until false;
 END HatchSettings;
 
 PROCEDURE Initialise;
 VAR
 	i	: integer;
+	r	: real;
 BEGIN
-	namever :='Shadow v0.4   Copyright D Henderson 2017.';
+	namever :='Shadow v0.5   Copyright D Henderson 2017.';
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
-	
-	!if there is a selection set named 'ShadEnts' the set this to define the shadow entities
-	entityss := -1;
-	for i := 0 to 7 do
-		ssGetName (i, str);
-		if strcomp ('ShadEnts', str, -1) then
-			entityss := i;
-		end;
-	end;
+
+	initSettings ('Shadow.ini');
+
 	HighlightSS (entityss, true, false);
-
-	! if there is not an existing 'ShadowNorth' attribute in the drawing, then prompt
-	! for North before doing anything else
-	if atr_sysfind ('ShadowNorth', atr) then
-		north := atr.ang;
-	else
-		north := halfpi;
-		GetNorth;
-	end;
-
-	! if there is not an existing 'Shad_Azimuth' attribute in the drawing, then default to zero
-	if atr_sysfind ('Shad_Azimuth', atr) then
-		azimuth := atr.ang;
-	else
-		azimuth := 0.0;
-	end;
-
-	! if there is not an existing 'ShadAltitude' attribute in the drawing, then default to halfpi
-	if atr_sysfind ('ShadAltitude', atr) then
-		altitude := atr.ang;
-		! set sunposmsg if there is an existing attribute in the drawing
+	north := GetSvdAng ('ShadowNorth', halfpi);
+	azimuth := GetSvdAng ('Shad_Azimuth', 0.0);
+	altitude :=GetSvdAng ('ShadAltitude', halfpi);
+	if realequal (azimuth,ABSZero) or realequal(altitude, halfpi) then
 		sunposmsg := '';
-		if atr_sysfind ('ShadSunPosMg', atr) then
-			strassign (sunposmsg, atr.str);
-		end;
+		SaveStr ('ShadSunPosMg', sunposmsg, false);
 	else
-		altitude := halfpi;
+		GetSvdStr ( 'ShadSunPosMg', '', sunposmsg);
 	end;
+	colour := GetSvdInt ('ShadColour', -1);
+	hatchclr := GetSvdInt('ShadHatchClr', -1);
+	hatchlines := GetSvdInt ('ShadHtchLins', 0);
+	if scaletype < 6 then
+		r := 192.0;	! default to 6 inches
+	else
+		r := 188.9763779527559;	! default to 15cm
+	end;
+	hatchspace := GetSvdRl ('ShadHtchSpcg', r ); 
+	hatchang := GetSvdAng ('ShadHtchAngl', 0.0);
 
-	! if there is not an existing 'ShadColour' attribute in the drawing, then default to -1
-	if atr_sysfind ('ShadColour', atr) then
-		colour := atr.int;
-	else
-		colour := -1;
-		atr_init (atr, atr_int);
-		atr.name := 'ShadColour';
-		atr.int := colour;
-		atr_add2sys (atr);
-	end;
+  entityss := GetSvdInt ('ShadEntSlSet', -1);
 
-	! if there is not an existing 'ShadTrim' attribute in the drawing, then default to true
-	if atr_sysfind ('ShadTrim', atr) then
-		trim := atr.int <> 0;
-	else
-		trim := true;
-		atr_init (atr, atr_int);
-		atr.name := 'ShadTrim';
-		atr.int := 1;
-		atr_add2sys (atr);
-	end;
+	trim := GetSvdBln ('ShadTrim', true);
 
 	! check if a surface polygon has previously been selected for this drawing
 	ss := false;
@@ -1688,7 +1669,7 @@ BEGIN
 		lblsett (8, 'Trim Shadow', trim);
 		lblmsg (8, 'Trim Shadow to surface polygon');
 		
-		lblsett (10, 'Hatch', hatch);
+		lblsett (10, 'Hatch', hatchlines > 0);
 		lblmsg (10, 'Hatch the shadows');
 		
 		lblsett (13, 'Spec Clr', colour >= 0);
@@ -1721,7 +1702,7 @@ BEGIN
 		lblmsg (18, 'Generate shadows for selected entities');
 
 		lblset (20, 'Exit');
-		
+
 		lblson;
 		
 		getesc (key);
@@ -1737,14 +1718,15 @@ BEGIN
 			GetSurface;
 		ELSIF key = f8 THEN
 			trim := not trim;
-			if atr_sysfind ('ShadTrim', atr) then
+			SaveBln ('ShadTrim', trim, true);
+{			if atr_sysfind ('ShadTrim', atr) then
 				if trim then
 					atr.int := 1;
 				else
 					atr.int := 0;
 				end;
 				atr_update (atr);
-			end;
+			end;}
 		ELSIF key = f0 THEN
 			HatchSettings;
 		ELSIF key = s3 THEN
@@ -1754,13 +1736,13 @@ BEGIN
 			if colour < -1000 then
 				colour := colour+1000;
 			end;
-			SaveClr;
+			SaveInt ('ShadColour', colour, true);
 		ELSIF key = s5 THEN
 			colour := -absi(colour);
 			if colour > -1000 then
 				colour := colour-1000;
 			end;
-			SaveClr;
+			SaveInt ('ShadColour', colour, true);
 		ELSIF key = s6 THEN
 			GetShadowLyr;
 		ELSIF key = s8 THEN
@@ -1772,6 +1754,5 @@ BEGIN
 	UNTIL done;
 	
 	regen;		! get rid of any higlights that are hanging around
-	
 END Shadow.
 

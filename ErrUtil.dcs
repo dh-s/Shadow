@@ -33,15 +33,29 @@ BEGIN
 	return true;
 END DisplayFileError;
 
-PROCEDURE DisplayVerboseMsg (msg : string);		PUBLIC;
+PROCEDURE DisplayVerboseMsg (msgnum : integer);		PUBLIC;
+!!! error to display identified by msgnum. 
+!!! Note that although DCAL supports strings up to 255 chars, the max hard-coded string length the compiler
+!!! will accept is 80. So need to build up longer strings using strcat etc.
 VAR
-	res : integer;
-	str : str255;
+	msg : str255;
 BEGIN
-	execAndWait ('%windir%\\system32\\calc.exe', 1, res);
-	cvintst (res, str);
-	strins (str, 'ExecAndWait res: ', 1);
-	MSG_OK (str);
+	if msgnum = 1 then
+		msg := 'Unexpected result casting shadows:\r';
+		strcat (msg, '  Excessive iterations in trim loop.\r\r');
+		strcat (msg, 'Interim Shadow lines have been shown\rtemporarily on drawing (refresh to remove)');
+		msg_OK (msg);
+		msg := 'Please dismiss this message and take a screen dump and send the dump\r';
+		strcat (msg, 'to the author (dhsoftware1@gmail.com) together with any other\r');
+		strcat (msg, 'details you are willing to share (e.g. drawing file)\r');
+		strcat (msg, '\rThank you');
+	else
+		msg := 'An error of some sort has happened when running the macro.\r\r';
+		strcat (msg, 'Please advise the author (dhsoftware1@gmail.com) including\r');
+		strcat (msg, 'as many details as possible.\r');
+		strcat (msg, '\rThank you');
+	end;
+	msg_OK (msg);
 END DisplayVerboseMsg;
 
 

@@ -1,0 +1,220 @@
+MODULE Settings;
+
+PROCEDURE writeIniStr (IniFile, Section, Ident, Value : str255); BUILTIN 624;
+PROCEDURE readIniStr (IniFile, Section, Ident, Default : str255; ReturnStr : OUT str255); BUILTIN 625;
+PROCEDURE writeIniInt (IniFile, Section, Ident : str255; Value : integer); BUILTIN 628;
+PROCEDURE readIniInt ( IniFile, Section, Ident: str255; Default : integer; ReturnInt : OUT integer); BUILTIN 629;
+PROCEDURE writeIniReal (IniFile, Section, Ident : str255; Value : real); BUILTIN 630;
+PROCEDURE readIniReal (IniFile, Section, Ident: str255; Default : real; ReturnReal : OUT real); BUILTIN 631;
+PROCEDURE msg_OK (msg : str255); BUILTIN 245;
+
+VAR
+	iniFileName	: str255;
+	ident				: str255;
+	section			: str255;
+	atr					: attrib;
+	initialised	: boolean;
+
+PROCEDURE InitSettings (iniName : string);		PUBLIC;
+BEGIN
+		getpath (iniFileName, pathmcr);
+		strcat (iniFileName, iniName);
+		section := 'General';
+		initialised := true;
+END InitSettings;
+
+PROCEDURE SaveInt (name : string;  value : integer; toini : boolean);		PUBLIC;
+BEGIN
+	if atr_sysfind (name, atr) then
+		atr.int := value;
+		atr_update (atr);
+	else
+		atr_init (atr, atr_int);
+		atr.name := name;
+		atr.int := value;
+		atr_add2sys (atr);
+	end;
+	if toini then
+		strassign (ident, name);
+		writeIniInt (iniFileName, section, ident, value);
+	end;
+END SaveInt;
+
+FUNCTION GetSvdInt (name : string; default : integer) : integer;		PUBLIC;
+VAR
+	i : integer;
+BEGIN
+	if atr_sysfind (name, atr) then
+		return atr.int;
+	else
+		strassign (ident, name);
+		readIniInt (iniFileName, section, ident, default, i);
+		return i;
+	end;
+END GetSvdInt;
+
+
+
+PROCEDURE SaveAng (name : string;  value : real; toini : boolean);		PUBLIC;
+BEGIN
+	if atr_sysfind (name, atr) then
+		atr.ang := value;
+		atr_update (atr);
+	else
+		atr_init (atr, atr_ang);
+		atr.name := name;
+		atr.ang := value;
+		atr_add2sys (atr);
+	end;
+	if toini then
+		strassign (ident, name);
+		writeIniReal (iniFileName, section, ident, value);
+	end;
+END SaveAng;
+
+FUNCTION GetSvdAng (name : string; default : real) : real;		PUBLIC;
+VAR
+	r : real;
+BEGIN
+	if atr_sysfind (name, atr) then
+		return atr.ang;
+	else
+		strassign (ident, name);
+		readIniReal (iniFileName, section, ident, default, r);
+		return r;
+	end;
+END GetSvdAng;
+
+
+
+
+PROCEDURE SaveRl (name : string;  value : real; toini : boolean);		PUBLIC;
+BEGIN
+	if atr_sysfind (name, atr) then
+		atr.rl := value;
+		atr_update (atr);
+	else
+		atr_init (atr, atr_rl);
+		atr.name := name;
+		atr.rl := value;
+		atr_add2sys (atr);
+	end;
+	if toini then
+		strassign (ident, name);
+		writeIniReal (iniFileName, section, ident, value);
+	end;
+END SaveRl;
+
+FUNCTION GetSvdRl (name : string; default : real) : real;		PUBLIC;
+VAR
+	r : real;
+BEGIN
+	if atr_sysfind (name, atr) then
+		return atr.rl;
+	else
+		strassign (ident, name);
+		readIniReal (iniFileName, section, ident, default, r);
+		return r;
+	end;
+END GetSvdRl;
+
+
+
+PROCEDURE SaveBln (name : string;  value : boolean; toini : boolean);		PUBLIC;
+VAr
+	ival : integer;
+	sval : str255;
+BEGIN
+	if value then
+		ival := 1;
+		sval := 'true';
+	else
+		sval := 'false';
+	end;
+	if atr_sysfind (name, atr) then
+		atr.int := ival;
+		atr_update (atr);
+	else
+		atr_init (atr, atr_int);
+		atr.name := name;
+		atr.int := ival;
+		atr_add2sys (atr);
+	end;
+	if toini then
+		getpath (iniFileName, pathmcr);
+		strcat (iniFileName, 'Shadow.ini');
+		strassign (ident, name);
+		writeIniStr (iniFileName, section, ident, sval);
+	end;
+END SaveBln;
+
+FUNCTION GetSvdBln (name : string; default : boolean) : boolean;		PUBLIC;
+VAR
+	b : boolean;
+	s : str255;
+	d	: str255;
+BEGIN
+	if atr_sysfind (name, atr) then
+		if atr.int = 0 then
+			return false;
+		else
+			return true;
+		end;
+	else
+		strassign (ident, name);
+		if default then
+			d := 'true';
+		else
+			d := 'false';
+		end;
+		readIniStr (iniFileName, section, ident, d, s);
+		if strpos ('t', s, 1) = 1 or strpos ('T', s, 1) = 1 then
+			return true;
+		else
+			return false;
+		end;
+	end;
+END GetSvdBln;
+
+
+PROCEDURE SaveStr (name : string;  value : string; toini : boolean);		PUBLIC;
+VAR
+	s : str255;
+BEGIN
+	if atr_sysfind (name, atr) then
+		atr.str := value;
+		atr_update (atr);
+	else
+		atr_init (atr, atr_str);
+		atr.name := name;
+		strassign (atr.str, value);
+		atr_add2sys (atr);
+	end;
+	if toini then
+		strassign (s, value);
+		strassign (ident, name);
+		writeIniStr (iniFileName, section, ident, s);
+	end;
+END SaveStr;
+
+PROCEDURE GetSvdStr (name : string; default : string; result : OUT str80 );		PUBLIC;
+VAR
+	res : str255;
+	def	: str255;
+	res80 : str80;
+BEGIN
+	if atr_sysfind (name, atr) then
+!		strassign (res, atr.str);
+		result := atr.str;
+	else
+		strassign (ident, name);
+		strassign (def, default);
+		readIniStr (iniFileName, section, ident, def, res);
+		strassign (res80, res);
+		result := res80;
+	end;
+END GetSvdStr;
+
+
+
+END Settings.

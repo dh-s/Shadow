@@ -1,6 +1,22 @@
 MODULE StrUtil;
 
+FUNCTION BlankString (s : string): boolean;		PUBLIC;
+VAR
+	i	: integer;
+	s1: string(1);
+BEGIN
+		if strlen(s) = 0 then
+			return true;
+		end;
+		for i := 1 to strlen(s) do
+			strsub (s, 1, 1, s1);
+			if not strcomp (s1, ' ', 1) then
+				return false;
+			end;
+		end;
+		return true;
 
+END BlankString	;
 
 
 END StrUtil.
