@@ -1,4 +1,5 @@
-FUNCTION PntsEqual (p1, p2 : point) : boolean;			EXTERNAL;
+FUNCTION PntsEqual (p1, p2 : point;
+										delta  : real) : boolean;			EXTERNAL;
 
 PROCEDURE SortPnts (pnts : IN OUT pntarr;
 										npnts : IN OUT integer;

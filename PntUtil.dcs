@@ -1,0 +1,222 @@
+MODULE PointUtil;
+
+# INCLUDE '..\\..\\Inc\\_misc.inc'
+
+PROCEDURE msg_OK (msg : str255); BUILTIN 245;
+
+
+FUNCTION PntsEqual (p1, p2 : point; delta : real) : boolean;			PUBLIC;
+BEGIN
+	return (absr(p1.x-p2.x) <= delta) and (absr(p1.y-p2.y) <= delta);
+END PntsEqual;
+
+PROCEDURE SortPnts (pnts : IN OUT pntarr;  npnts : IN OUT integer; elimdupes : boolean);		PUBLIC;
+!!! Sorts pnts in order of distance from pnts[1] using a simple bubble sort.
+!!! Also optionally eliminates duplicates
+VAR
+	i, j	: integer;
+	pnt		: point;
+	swap	: boolean;
+BEGIN
+	if npnts <=2 then
+		return;
+	end;
+
+	! sort
+	REPEAT
+		swap := false;
+		for i := 2 to npnts-1 do
+			if distance(pnts[1], pnts[i]) > distance(pnts[1], pnts[i+1]) then
+				! Swap points
+				pnt := pnts[i];
+				pnts[i] := pnts[i+1];
+				pnts[i+1] := pnt;
+				swap := true;
+			end;
+		end;
+	UNTIL NOT swap;
+
+	! eliminate duplicates
+	if elimdupes then
+		i := 2;
+		while i < npnts do
+			if PntsEqual (pnts[i],pnts[i-1]) then
+				for j := i to npnts-1 do
+					pnts[j] := pnts[j+1];
+				end;
+				npnts := npnts-1;
+			end;
+			i := i+1;
+		end;
+		if PntsEqual (pnts[npnts-1], pnts[npnts]) then
+			pnts[npnts-1] := pnts[npnts];
+			npnts := npnts-1;
+		end;
+	end;
+END SortPnts;
+
+
+FUNCTION  PntInPly (pnt : point;
+										ply : array of point; 
+										npnt : integer) : integer;			PUBLIC;
+!!! this function will return the following values:
+!!!    1  if pnt is inside ply
+!!!    0  if pnt is on the boundary of ply
+!!!    -1 if pnt is outside ply
+VAR
+	i, j					: integer;
+	ospnt					: point;	! a point set up to be outside ply
+	minx, maxx,
+	miny, maxy		: real;
+	retval				: integer;
+	satisfactory	: boolean;
+	intr					: point;
+	xcount				: integer;
+	trycount			: integer;
+	ent						: entity;
+tempstr	: str255;
+tempstr1	: str255;
+debug		: boolean;
+
+BEGIN
+	debug := false;
+	minx := ply[1].x;
+	maxx := minx;
+	miny := ply[1].y;
+	maxy := miny;
+	
+
+if debug then
+	regen;
+	ent_init (ent, entply);
+	for i := 1 to npnt do
+		if i <= 36 then
+			ent.plypnt[i] := ply[i];
+			ent.plynpnt := i;
+		end;
+	end;
+	ent.color := clryellow;
+	ent.width := 1;
+	ent_draw (ent, drmode_white);
+	
+	ent_init (ent, entmrk);
+	ent.mrkpnt := pnt;
+	ent.color := clryellow;
+	ent.mrktyp := 3;
+	ent.mrksiz := 50;
+	ent_draw (ent, drmode_white);
+	msg_ok ('debug drawn');
+end;
+	
+	! check if on a boundary and also set up min & max x & y values
+	for i := 1 to npnt do
+		if ply[i].x < minx then
+			minx := ply[i].x;
+		end;
+		if ply[i].x > maxx then
+			maxx := ply[i].x;
+		end;
+		if ply[i].y < miny then
+			miny := ply[i].y;
+		end;
+		if ply[i].y > maxy then
+			maxy := ply[i].y;
+		end;
+		j := i+1;
+		if j > npnt then
+			j := 1;
+		end;
+
+{
+		if (crossz (ply[i], ply[j], pnt) = 0.0) and (between(ply[i], ply[j], pnt) >= 0) then
+if debug then 
+ent_init (ent, entlin);
+ent.linpt1 := ply[i];
+ent.linpt2 := ply[j];
+ent.color := clryellow;
+ent_draw_dl (ent, drmode_white, true);
+ent_init (ent, entmrk);
+ent.mrkpnt := pnt;
+ent.mrktyp := 3;
+ent.mrksiz := 60;
+ent.color := clrltgrn;
+ent_draw (ent, drmode_white);
+
+msg_OK ('the On boundary');
+end;
+			return 0;
+		end;
+}
+	end;
+
+	! check if point is outside bounding rectangle (defined by min & max x & y values)
+	if (pnt.x < minx) or (pnt.x > maxx) or (pnt.y < miny) or (pnt.y > maxy) then
+if debug then MSG_ok ('Outside bounding box'); end;
+		return -1;
+	end;
+	
+	! set up ospnt to a point outside the bounding rectangle
+	ospnt.x := minx-1.0;
+	ospnt.y := miny + (maxy - miny)/2.0;
+if debug then
+ent_init (ent, entlin);
+ent.linpt1 := pnt;
+ent.linpt2 := ospnt;
+ent.color := clryellow;
+ent_draw (ent, drmode_white);
+end;
+
+	! check how many times a line from ospnt to pnt crosses ply boundary
+	! An odd number of times indicates that pnt is inside ply
+	! An even number of times indicates that pnt is outside ply
+	repeat
+		satisfactory := true;
+		trycount := 0;
+		xcount := 0;
+		for i := 1 to npnt do
+			j := i+1;
+			if j > npnt then
+				j := 1;
+			end;
+			if intr_linlin (ospnt, pnt, ply[i], ply[j], intr, true) then
+				if PntsEqual (intr, ply[i]) or PntsEqual (intr, ply[j]) then
+					! looks like our line goes though one of the points  ... result may not be reliable
+					satisfactory := false;
+					trycount := trycount+1;
+					if PntsEqual (intr, ply[i]) then
+						xcount := xcount+1;
+					end;
+				else 
+					xcount := xcount+1;
+				end;
+			end;
+		end;
+	until satisfactory or trycount > 12;
+	
+if debug then
+cvintst (trycount, tempstr);
+cvintst (xcount, tempstr1);
+strins (tempstr, 'TryCount: ', 1);
+strcat (tempstr, '   xCount: ');
+strcat (tempstr, tempstr1);
+msg_ok (tempstr);
+end;
+
+	if xcount mod 2 = 0 then
+		return -1;
+	else
+		return 1;
+	end;
+END PntInPly;
+
+PROCEDURE SwapPnts (p1, p2 : IN OUT point);			PUBLIC;
+VAR
+	p	: point;
+BEGIN
+	p := p1;
+	p1 := p2;
+	p2 := p;
+END SwapPnts;
+
+
+END PointUtil.

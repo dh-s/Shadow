@@ -1,9 +1,12 @@
 Copyright Notice:
 
 This software is copyright David Henderson 2017.
+
 This software is distributed free of charge and without warranty. You may distribute it to others provided that you do so free of charge (including without charge for the distribution media unless explicit permission has been obtained from the author).
+
 This document should always be distributed together with the compiled macro (dcx file).  The source code should always be either distributed with the compiled macro or made freely available to those who receive the macro.
-You may modify this software for your own use without limitation.  If you convey a copy of the modified software to others, you may only do so under the following conditions:    
+
+You may modify this software for your own use without limitation.  If you convey a copy of the modified software to others, you may only do so under the following conditions:
 
 1. You either convey your source code (dcs file) together with the compiled macro (dcx file), or else you make the source code freely available to those who receive the macro.   
         
