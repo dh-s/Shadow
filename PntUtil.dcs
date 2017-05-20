@@ -40,7 +40,7 @@ BEGIN
 	if elimdupes then
 		i := 2;
 		while i < npnts do
-			if PntsEqual (pnts[i],pnts[i-1]) then
+			if PntsEqual (pnts[i],pnts[i-1], ABSZero) then
 				for j := i to npnts-1 do
 					pnts[j] := pnts[j+1];
 				end;
@@ -48,7 +48,7 @@ BEGIN
 			end;
 			i := i+1;
 		end;
-		if PntsEqual (pnts[npnts-1], pnts[npnts]) then
+		if PntsEqual (pnts[npnts-1], pnts[npnts], ABSZero) then
 			pnts[npnts-1] := pnts[npnts];
 			npnts := npnts-1;
 		end;
@@ -179,11 +179,11 @@ end;
 				j := 1;
 			end;
 			if intr_linlin (ospnt, pnt, ply[i], ply[j], intr, true) then
-				if PntsEqual (intr, ply[i]) or PntsEqual (intr, ply[j]) then
+				if PntsEqual (intr, ply[i], ABSZero) or PntsEqual (intr, ply[j], ABSZero) then
 					! looks like our line goes though one of the points  ... result may not be reliable
 					satisfactory := false;
 					trycount := trycount+1;
-					if PntsEqual (intr, ply[i]) then
+					if PntsEqual (intr, ply[i], ABSZero) then
 						xcount := xcount+1;
 					end;
 				else 
