@@ -1,0 +1,44 @@
+MODULE SolidFll;
+
+TYPE
+	filldef = RECORD
+		dunno1	: integer;	! seems to be always 272
+		dunno2	: integer;	! seems to be always 0
+		fillclr	: integer;	! clrnum x 256,  +255 if entity clr,  (wraps to -ve over clr127)
+		entclr	: integer;	! -1 to fill with entity clr, else 0
+		filltyp	: integer;	! 0..6 multiplied by 256
+		ptnclr	: integer;	! clrnum x 256
+	END;
+
+	atrstr = RECORD
+		a : integer;
+		CASE integer of
+			0 : (s : str80);
+			1 : (f : filldef);
+	END;
+
+PROCEDURE SolidFill (ent : IN OUT entity;  clr : integer);		PUBLIC;
+!!! -ve clr means to use entity colour
+VAR
+	atr		: attrib;
+	fd		: atrstr;
+BEGIN
+	atr_init (atr, atr_str);
+	fd.f.dunno1 := 272;
+	fd.f.dunno2 := 0;
+	fd.f.fillclr := absi(clr)*256;
+	if clr < 0 then
+		fd.f.entclr := -1;
+		fd.f.fillclr := fd.f.fillclr + 255;
+	else
+		fd.f.entclr := 0;
+	end;
+	fd.f.filltyp := 0;
+	fd.f.ptnclr := 256;	! value doesn't matter for solid fill?
+	atr.str := fd.s;
+	atr.name := 'DC_FILL';
+	atr_add2ent (ent, atr);
+END SolidFill;
+
+
+END SolidFll.

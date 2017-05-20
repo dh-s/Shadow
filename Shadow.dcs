@@ -50,6 +50,7 @@ PROGRAM Shadow;
 # INCLUDE 'Errutil.inc'
 # INCLUDE 'Settings.inc'
 # INCLUDE 'StrUtil.inc'
+# INCLUDE 'SolidFll.inc'
 
 CONST
    ssNum  = 11;
@@ -86,8 +87,7 @@ mat, invmat		: modmat;
 	lyrname		: str8;
 	lyr				: layer;
 	svlyr			: layer;
-!	hatch			: boolean;
-	hatchlines: integer;		!0 = No Hatch,  1 = parralel lines,  2 =CrossHatch
+	hatchlines: integer;		!0 = No Hatch,  1 = parralel lines,  2 =CrossHatch,  5 = solid fill
 	hatchspace: real;
 	hatchclr	: integer;
 	hatchang	: real;
@@ -937,6 +937,8 @@ PROCEDURE CreateShadPln (pnts : array of point; npnt : integer; shad : IN OUT en
 VAR
 	shadpv			: polyvert;
 	i						: integer;
+	fillent			: entity;
+
 BEGIN
 	if npnt < 3 then
 		return;
@@ -954,6 +956,13 @@ BEGIN
 		shad.color := entclr;
 	end;
 	ent_add (shad);
+	if hatchlines = 5 then
+		ent_init (fillent, entPln);
+		fillent.plnbase := 0.0;
+		fillent.plnhite := 0.0;
+		fillent.plnclose := true;
+		ent_add (fillent);
+	end;
 	for i := 1 to npnt do
 		polyvert_init (shadpv);
 		shadpv.shape := pv_vert;
@@ -963,9 +972,27 @@ BEGIN
 			shad.color := entclr;
 		end;
 		ent_update (shad);
+		
+		if hatchlines = 5 then ! solid fill
+			polyvert_init (shadpv);
+			shadpv.shape := pv_vert;
+			xformpt (pnts[i], invmat, shadpv.pnt);
+			shadpv.pnt.z := 0.0;
+			polyvert_add (shadpv, fillent.plnfrst, fillent.plnlast);
+			ent_update (fillent);
+		end;
 	end;
 	ssAdd (ssNum, shad);
-	
+	if hatchlines = 5 then
+		if hatchclr > 0 then
+			SolidFill (fillent, hatchclr);
+		else
+			SolidFill (fillent, shad.color);
+		end;
+		ent_draw(fillent, drmode_white);
+	end;
+
+
 	if extent1 then
 		ent_extent (shad, hmin, hmax);
 		extent1 := false;
@@ -1008,6 +1035,7 @@ VAR
 	match			: boolean;
 	tempent		: entity;
 	iterations	: integer;
+	delta			: real;
 
 FUNCTION GetNextSide : boolean;
 VAR
@@ -1045,7 +1073,7 @@ BEGIN
 				n := 1;
 			end;
 			if intr_linlin (Shad[i], Shad[j], Surf[m], Surf[n], sidepnts[nsidepnts+1], true) then
-				if (not PntsEqual (sidepnts[nsidepnts+1], Shad[j])) and (not PntsEqual (sidepnts[nsidepnts+1], Shad[i])) then
+				if (not PntsEqual (sidepnts[nsidepnts+1], Shad[j], ABSZero)) and (not PntsEqual (sidepnts[nsidepnts+1], Shad[i], ABSZero)) then
 					nsidepnts := nsidepnts+1;
 				end;
 				nintersect := nintersect+1;
@@ -1101,7 +1129,7 @@ BEGIN
 				n := 1;
 			end;
 			if intr_linlin (Surf[i], Surf[j], Shad[m], Shad[n], sidepnts[nsidepnts+1], true) then
-				if (not PntsEqual (sidepnts[nsidepnts+1], Surf[i])) and (not PntsEqual (sidepnts[nsidepnts+1], Surf[j])) then
+				if (not PntsEqual (sidepnts[nsidepnts+1], Surf[i], ABSZero)) and (not PntsEqual (sidepnts[nsidepnts+1], Surf[j], ABSZero)) then
 					nsidepnts := nsidepnts+1;
 				end;
 			end;
@@ -1127,7 +1155,7 @@ BEGIN
 		end;
 	end;
 
-	! CREATE POLYLINE(s) BASED ON THE LINES IN sides & sides ARRAYS
+	! CREATE POLYLINE(s) BASED ON THE LINES IN SIDES ARRAY
 	if nsides < 2 then
 		return -1;
 	end;
@@ -1137,6 +1165,17 @@ BEGIN
 	npnts := 2;
 	next:= 2;
 	iterations := 0;
+	delta := ABSZero;
+{
+for m := 1 to nsides do
+ent_init (ShadEnt, entlin);
+ShadEnt.linpt1 := sides[m].p1;
+ShadEnt.linpt2 := sides[m].p1;
+ShadEnt.color := 111;
+ent_draw (ShadEnt, drmode_white);
+end;
+msg_OK ('Drawn');
+}
 	REPEAT
 		iterations := iterations+1;
 		match := false;
@@ -1147,16 +1186,16 @@ BEGIN
 			end;
 		end;
 
-		if PntsEqual(sides[next].p1, pnts[npnts]) then
+		if PntsEqual(sides[next].p1, pnts[npnts], delta) then
 			match := true;
-		elsif PntsEqual (sides[next].p2, pnts[npnts]) then
+		elsif PntsEqual (sides[next].p2, pnts[npnts], delta) then
 			SwapPnts (sides[next].p1, sides[next].p2);		! surface sides could be going opposite direction to shadow sides
 			match := true;
 		end;
 
 		if match then
 			sides[next].used := true;
-			if PntsEqual(Pnts[1], sides[next].p2) then
+			if PntsEqual(Pnts[1], sides[next].p2, delta) then
 				CreateShadPln (pnts, npnts, ShadEnt);
 				if not GetNextSide then
 					return 1;
@@ -1170,7 +1209,10 @@ BEGIN
 				pnts[npnts] := sides[next].p2;
 			end;
 		end;
-	until not GetNextSide or iterations > 249;
+		if iterations > 249 then
+			delta := 0.00001;	! try a bigger delta if excessive iterations (should never happen??)
+		end;
+	until not GetNextSide or iterations > 449;
 	
 	if iterations > 249 then
 		! display shadow lines temporarily, but do not save anything to drawing file
@@ -1355,16 +1397,16 @@ BEGIN
 	end;
 
 	! now step through the entities and create a shadow entity for each
-	stopgroup;	! start a new group for the shadow entites
+	stopgroup;	! start a new group for the shadow entities
 	shadowcreated := 0;
 	mode_init (entmode);
 	mode_ss (entmode, entityss);
+	ssClear (ssNum);
 	addr := ent_first (entmode);
 	WHILE ent_get (ent, addr) DO
 		IF ent.enttype = entply and ent.addr <> surface.addr THEN		! we are only processing polygons ... ignore any other entities
 			extent1 := true;
 			entclr := ent.color;
-			ssClear (ssNum);
 			IF Cast (ent, shadow) THEN
 				shadowcreated := shadowcreated+1;
 !				ent_extent (shadow, hmin, hmax);
@@ -1376,17 +1418,12 @@ BEGIN
 				END;
 			END;
 			
-			if hatchlines > 0 then
+			if hatchlines > 0 and hatchlines < 5 then
 				! Add Hatch
 				mode_init (mode);
 				mode_ss (mode, ssNum);
 				for i := 1 to hatchlines do
-					!sl.ang := 0.0 + (float(i)-1.0)*pi/float(hatchlines);
-					if i = 1 then
-						sl.ang := 0.0 + hatchang;
-					else
-						sl.ang := halfpi + hatchang;
-					end;
+					sl.ang := hatchang + float(i-1) * pi / float(hatchlines);
 					setpoint (sl.origin, 0.0);
 					sl.delta.x := 0.0;
 					sl.delta.y := hatchspace;
@@ -1395,7 +1432,9 @@ BEGIN
 					hatch_mode (mode, sl, 0.0, 0.0, origin, 0.0, 1.0, htype_normal, lyr, hmin, hmax, false, j, false);
 				end;
 			end;
-			ssClear (ssNum);
+			if hatchlines < 5 then
+				ssClear (ssNum);
+			end;
 		END;
 		addr := ent_next (ent, entmode);
 	END;
@@ -1404,7 +1443,7 @@ BEGIN
 
 	if shadowcreated > 0 then
 		! update hatch entities
-		if hatchlines > 0 then
+		if hatchlines > 0 and hatchlines < 5 then
 			mode_init (mode);
 			mode_group (mode, shadow);
 			mode_enttype (mode, entlin);
@@ -1426,7 +1465,11 @@ BEGIN
 		! (the symbol itself will be rotated back into position using invmat once it is inserted)
 		SetShadSymbolName (symname);
 		mode_init (shadmode);
-		mode_group (shadmode, shadow);
+		if hatchlines = 5 then
+			mode_ss (shadmode, ssNum);
+		else
+			mode_group (shadmode, shadow);
+		end;
 
 		setpoint (ref, 0.0);
 		sym_create (sym, shadmode, ref, symname, true, true);
@@ -1443,7 +1486,6 @@ BEGIN
 			strcat (str, ' entities.');
 		end;
 		wrterr (str);
-
 	else
 		msg_OK ('No shadows cast on this surface by entity(s)');
 	end;
@@ -1533,53 +1575,64 @@ BEGIN
 		lblmsg (2, 'Hatch with a single set of parallel lines');
 		lblsett (3, 'Cross Hatch', hatchlines = 2);
 		lblmsg (3, 'Hatch with 2 sets of parallel lines at right angles to each other');
-		lblsett (9, 'Outln Clr', hatchclr < 0);
-		lblmsg (9, 'Hatch the same colour as the shadow outlines');
-		lblsett (10, 'Set Clr', hatchclr >= 0);
-		if hatchclr >= 0 then
-			clrGetName (hatchclr, tempstr);
-			strins (tempstr, 'Set hatch colour (', 1);
-			strcat (tempstr, ')');
-		else
-			tempstr := 'Set hatch colour';
+		lblsett (4, 'Net3', hatchlines = 3);
+		lblmsg (4, 'Hatch with 3 sets of parallel lines at 60 degrees to each other');
+		lblsett (6, 'Solid Fill', hatchlines = 5);
+		lblmsg (6, 'Fill shadows with solid fill');
+		if hatchlines > 0 then
+			lblsett (9, 'Outln Clr', hatchclr < 0);
+			lblmsg (9, 'Hatch the same colour as the shadow outlines');
+			lblsett (10, 'Set Clr', hatchclr >= 0);
+			if hatchclr >= 0 then
+				clrGetName (hatchclr, tempstr);
+				strins (tempstr, 'Set hatch colour (', 1);
+				strcat (tempstr, ')');
+			else
+				tempstr := 'Set hatch colour';
+			end;
+			lblmsg (10, tempstr);
+			
+			if hatchlines < 5 then
+				lblset (12, 'Spacing');
+				cvdisst (hatchspace, tempstr);
+				strins (tempstr, 'Set spacing between hatch lines (', 1);
+				strcat (tempstr, ')');
+				lblmsg (12, tempstr);
+				lblset (13, 'Angle');
+				cvangst (hatchang, tempstr);
+				strins (tempstr, 'Hatch angle relative to suns rays (', 1);
+				strcat (tempstr, ')');
+				lblmsg (13, tempstr);
+			end;
 		end;
-		lblmsg (10, tempstr);
-		
-		lblset (12, 'Spacing');
-		cvdisst (hatchspace, tempstr);
-		strins (tempstr, 'Set spacing between hatch lines (', 1);
-		strcat (tempstr, ')');
-		lblmsg (12, tempstr);
-		lblset (13, 'Angle');
-		cvangst (hatchang, tempstr);
-		strins (tempstr, 'Hatch angle relative to suns rays (', 1);
-		strcat (tempstr, ')');
-		lblmsg (13, tempstr);
-		
 		lblset (20, 'Exit');
 		lblson;
 		
 		getesc (key);
-		if (key >= f1)and (key <= F3) then
+		if (key >= f1)and (key <= F6) and (key <> f5) then
 			hatchlines := key-f1;
 			SaveInt ('ShadHtchLins', hatchlines, true);
-		elsif key = f9 then
-			hatchclr := -absi(hatchclr);
-		elsif key = f0 then
-			hatchclr := absi(hatchclr);
-			getclr (hatchclr);
-		elsif key = s2 then
-			wrtmsg ('Enter hatch spacing: ');
-			getdis (hatchspace);
-			wrtmsg ('');
-			SaveRl ('ShadHtchSpcg', hatchspace, true);
-		elsif key = s3 then
-			wrtmsg ('Enter hatch angle (relative to suns rays): ');
-			getang (hatchang);
-			wrtmsg ('');
-			SaveRl ('ShadHtchAngl', hatchspace, true);
 		elsif key = s0 then
 			return;
+		elsif hatchlines > 0 then
+			if key = f9 then
+				hatchclr := -absi(hatchclr);
+			elsif key = f0 then
+				hatchclr := absi(hatchclr);
+				getclr (hatchclr);
+			elsif (hatchlines < 4) then
+				if (key = s2) then
+					wrtmsg ('Enter hatch spacing: ');
+					getdis (hatchspace);
+					wrtmsg ('');
+					SaveRl ('ShadHtchSpcg', hatchspace, true);
+				elsif key = s3 then
+					wrtmsg ('Enter hatch angle (relative to suns rays): ');
+					getang (hatchang);
+					wrtmsg ('');
+					SaveRl ('ShadHtchAngl', hatchang, true);
+				end;
+			end;
 		end;
 	until false;
 END HatchSettings;
@@ -1589,7 +1642,7 @@ VAR
 	i	: integer;
 	r	: real;
 BEGIN
-	namever :='Shadow v0.5   Copyright D Henderson 2017.';
+	namever :='Shadow v0.7   Copyright D Henderson 2017.';
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
 
