@@ -51,6 +51,7 @@ PROGRAM Shadow;
 # INCLUDE 'Settings.inc'
 # INCLUDE 'StrUtil.inc'
 # INCLUDE 'SolidFll.inc'
+# INCLUDE 'Arrows.inc'
 
 CONST
    ssNum  = 11;
@@ -93,6 +94,8 @@ mat, invmat		: modmat;
 	hatchang	: real;
 	hmin, hmax, hmin1, hmax1	: point;
 	extent1		: boolean;
+	vertical	: boolean;
+	toponly		: boolean;
 
 	
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
@@ -144,6 +147,7 @@ VAR
 	END SaveNorth;
 	
 BEGIN
+	ShowArrow (north, 'CURRENT NORTH', clrWhite);
 	lblsinit;
 	lblset (20, 'Exit');
 	lblson;
@@ -176,6 +180,7 @@ BEGIN
 		END;
 	UNTIL done;
 	north := ang;
+	ShowArrow (north, 'NORTH', clrWhite);
 	SaveNorth;
 END GetNorth;
 
@@ -635,34 +640,27 @@ BEGIN
 
 END GetModMat;
 
-PROCEDURE HighlightSurface;
-!!! Highlight the surface entity by drawing it dashed in grey with increased line width. New line details are
-!!! not saved, so subsequent call to regen will display it normally again).
-VAR
-	SvWgt	: boolean;
-BEGIN
-	ent_draw (surface, drmode_black);
-	surface.ltype := ltype_dashed;
-	surface.spacing := 13.0*pixsize;
-	surface.color := clrltgray;
-	surface.width := 2;
-	SvWgt := showwgt;
-	showwgt := true;
-	ent_draw (surface, drmode_white);
-	showwgt := SvWgt;
-END HighlightSurface;
 
 PROCEDURE HighlightEnt (ent: IN OUT entity; show : boolean; surface : boolean);
 VAR
 	tempent		: entity;
 	i, j		: integer;
+	SvWgt		: boolean;
+	Svltype	: integer;
+	svclr		: integer;
+	svspc		: real;
 BEGIN
+	SvWgt := showwgt;
+	showwgt := true;
+	svspc := ent.spacing;
+	Svltype := ent.ltype;
+	svclr := ent.color;
 	if show then
+		ent.width := ent.width+1;
 		ent_draw_dl (ent, drmode_black, false);
 		ent.ltype := ltype_dashed;
 		if surface then
-			ent.spacing := 20.0*pixsize;
-			ent.width := ent.width+1;
+			ent.spacing := 22.0*pixsize;
 		else
 			ent.spacing := 13.0*pixsize;
 		end;
@@ -678,7 +676,7 @@ BEGIN
 			ent_init (tempent, entln3);
 			tempent.color := clrltgray;
 			tempent.spacing := ent.spacing;
-			tempent.width := ent.width+1;
+			tempent.width := ent.width;
 			for i := 1 to ent.plyNpnt do
 				if i=ent.plyNpnt then
 					j := 1;
@@ -701,15 +699,17 @@ BEGIN
 			ent_draw_dl (ent, drmode_white, false);
 		end;
 	else
-		if surface then
-			ent.width := ent.width+1;
-			ent_draw_dl (ent, drmode_black, false);
-			ent.width := ent.width-1;
-		else
-			ent_draw_dl (ent, drmode_black, false);
-		end;
+		ent.width := ent.width+1;
+		ent_draw_dl (ent, drmode_black, false);
+		ent.width := ent.width-1;
 		ent_draw_dl (ent, drmode_white, false);
+		ent.width := ent.width+1;
 	end;
+	ent.width := ent.width-1;
+	ent.spacing := svspc;
+	ent.ltype := Svltype;
+	ent.color := svclr;
+	showwgt := SvWgt;
 END HighlightEnt;
 
 
@@ -742,19 +742,45 @@ BEGIN
 	END;
 END HighlightSS;
 
+FUNCTION PlyIsVertical (ply : entity) : boolean;
+VAR
+	btmleft, topright : point;
+	i : integer;
+BEGIN
+	if ply.enttype <> entply then
+		return false;
+	end;
+	ent_extent (surface, btmleft, topright);
+	if (btmleft.x = topright.x) or (btmleft.y = topright.y) then
+		return true;		! is vertical (parallel to either x or y axis)
+	else
+		for i := 1 to surface.plyNpnt do
+			if dis_from_line (btmleft, topright, surface.plypnt[i]) > ABSZero then
+				return false;
+			end;
+		end;
+	end;
+	return true;
+END PlyIsVertical;
 
 PROCEDURE GetSurface;
 VAR
 	b			: boolean;
 	svsurface	: entity;
+	bl, tr	: point; 
 BEGIN
-	regen; 	! remove any existing higlighted surface
-	HighlightSS (entityss, true, false);	! re-highlight any selected entities unhighlighted by the above regen
+!	regen; 	! remove any existing higlighted surface
+!	HighlightSurface;
+	HighlightSS (entityss, false, false);
+	HighlightEnt (surface, true, true);
+!	HighlightSS (entityss, true, false);	! re-highlight any selected entities unhighlighted by the above regen
 	svsurface := surface;
-	lblsinit;
-	lblset (20, 'Exit');
-	lblson;
 	REPEAT
+		lblsinit;
+		lblsett (8, 'Top Only', toponly);
+		lblmsg (8, 'Cast shadows on upper surface only of non-vertical polygons');
+		lblset (20, 'Exit');
+		lblson;
 		wrtmsg ('Select polygon to cast shadows onto');
 		res := getpoint (pt, key);
 		IF res = res_normal THEN
@@ -767,7 +793,9 @@ BEGIN
 			mode_enttype (mode, entply);
 			bres := ent_near (surface, pt.x, pt.y, mode, true);
 			IF bres THEN
-				HighlightSurface;
+!				HighlightSurface;
+				HighlightEnt (svsurface, false, true);
+				HighlightEnt (surface, true, true);
 				! store the address of the surface as an attribute in the drawing
 				if atr_sysfind ('ShadSurface', atr) then
 					atr.lgladdr := lgl_addr(surface.addr);
@@ -780,6 +808,7 @@ BEGIN
 					atr_add2sys (atr);
 					ss := true;
 				end;
+				vertical := PlyIsVertical(surface);
 				return;
 			ELSE
 				msg_OK ('Selected point too far from a suitable polygon');
@@ -788,10 +817,14 @@ BEGIN
 		ELSIF res = res_escape THEN
 			IF key = s0 THEN
 				surface := svsurface;
+				vertical := PlyIsVertical(surface);
 				IF ss THEN
-					HighlightSurface;
+!					HighlightSurface;
+					HighlightEnt (surface, true, true);
 				END;
 				RETURN;
+			ELSIF key = f8 THEN
+				toponly := not toponly;
 			END;
 		END;
 	UNTIL false;
@@ -806,6 +839,7 @@ var
 	addr		: entaddr;
 	ent			: entity;
 BEGIN
+	HighlightSS (entityss, true, false);
 	repeat
 		wrtlvl ('Shadow Entities');
 		lblsinit;
@@ -850,7 +884,7 @@ BEGIN
 			strcat (tempstr, '\':');
 			wrtmsg (tempstr);
 			ssGetName (entityss, tempstr);
-			getstr (tempstr, 12);
+			getstr (tempstr, 8);
 			if not BlankString(tempstr) then
 				ssSetName (entityss, tempstr);
 			end;
@@ -937,7 +971,6 @@ PROCEDURE CreateShadPln (pnts : array of point; npnt : integer; shad : IN OUT en
 VAR
 	shadpv			: polyvert;
 	i						: integer;
-	fillent			: entity;
 
 BEGIN
 	if npnt < 3 then
@@ -956,13 +989,6 @@ BEGIN
 		shad.color := entclr;
 	end;
 	ent_add (shad);
-	if hatchlines = 5 then
-		ent_init (fillent, entPln);
-		fillent.plnbase := 0.0;
-		fillent.plnhite := 0.0;
-		fillent.plnclose := true;
-		ent_add (fillent);
-	end;
 	for i := 1 to npnt do
 		polyvert_init (shadpv);
 		shadpv.shape := pv_vert;
@@ -972,25 +998,15 @@ BEGIN
 			shad.color := entclr;
 		end;
 		ent_update (shad);
-		
-		if hatchlines = 5 then ! solid fill
-			polyvert_init (shadpv);
-			shadpv.shape := pv_vert;
-			xformpt (pnts[i], invmat, shadpv.pnt);
-			shadpv.pnt.z := 0.0;
-			polyvert_add (shadpv, fillent.plnfrst, fillent.plnlast);
-			ent_update (fillent);
+	end;
+	if hatchlines = 5 then
+		if hatchclr > 0 then
+			SolidFill (shad, hatchclr);
+		else
+			SolidFill (shad, shad.color);
 		end;
 	end;
 	ssAdd (ssNum, shad);
-	if hatchlines = 5 then
-		if hatchclr > 0 then
-			SolidFill (fillent, hatchclr);
-		else
-			SolidFill (fillent, shad.color);
-		end;
-		ent_draw(fillent, drmode_white);
-	end;
 
 
 	if extent1 then
@@ -1264,11 +1280,23 @@ VAR
 		below		: boolean;	! flag used to indicate if any points are below the surface plane
 		abovepnt	: integer;	! index of the first point that is above the surface
 		surfacepnts : pntarr;
+		temppnt		: point;
 	BEGIN
-		! do not cast a shadow for the surface if it is also in the entity set
+		! do not cast a shadow for the surface in case it is in the entity set
 		if castent.addr = shadow.addr then
 			return false;
 		end;
+
+		! do not cast a shadow for the surface if the sun is below it and toponly flag is true
+		if toponly and not vertical then
+			temppnt := surface.plypnt[1];
+			temppnt.z := temppnt.z + 100.0;		! set up temppnt to be above the surface
+			xformpt (temppnt, mat, temppnt);
+			if temppnt.z < 0.0 then
+				return false;		! if xformed temppnt.z is < zero then sun is shining on the underside of the polygon.
+			end;
+		end;
+		
 		!set up points as being the points of castent with the modelling matrix applied
 		npoints := castent.plyNpnt;
 		below := false;
@@ -1499,6 +1527,12 @@ VAR
 	view		: view_type;
 	scalenum	: integer;
 	viewcent	: point;
+	modess		: mode_type;
+	ll, tr,
+	ll2, tr2	: point;
+	first			: boolean;
+	addrss		: entaddr;
+	ent				: entity;
 BEGIN
 	! first remove any existing 'Suns-Eye' views
 	view.next := view_first;
@@ -1508,10 +1542,36 @@ BEGIN
 		end;
 	END;
 	
-	! get current scalenum & cent to use in the new view
+	! get current scalenum to use in the new view
 	view_getcurr (view);
 	scalenum := view.scalenum;
-	viewcent := view.viewcent;
+	
+	! set centre of view at centre of entities
+	ll := view.viewcent;
+	tr := view.viewcent;
+	mode_init (modess);
+	mode_ss (modess, entityss);
+	mode_enttype (modess, entply);
+	addrss := ent_first (modess);
+	first := true;
+	WHILE ent_get (ent, addrss) DO
+		if first then
+			ent_extent (ent, ll, tr);
+		else
+			ent_extent (ent, ll2, tr2);
+			ll.x := min (ll.x, ll2.x);
+			ll.y := min (ll.y, ll2.y);
+			ll.z := min (ll.z, ll2.z);
+			tr.z := max (tr.z, tr2.z);
+			tr.y := max (tr.y, tr2.y);
+			tr.x := max (tr.x, tr2.x);
+			first := false;
+		end;
+		addrss := ent_next (ent, modess);
+	END;
+	viewcent.x := ll.x + (tr.x - ll.x)/2.0;
+	viewcent.y := ll.y + (tr.y - ll.y)/2.0;
+	viewcent.z := ll.z + (tr.z - ll.z)/2.0;
 	
 	! setup the new view
 	view_init (view);
@@ -1523,7 +1583,8 @@ BEGIN
 	
 	! display the view with the surface & entities highlighted
 	view_setcurr (view, true);
-	HighlightSurface;
+!	HighlightSurface;
+	HighlightEnt (surface, true, true);
 	HighlightSS (entityss, true, false);
 END SunsEye;
 
@@ -1642,13 +1703,13 @@ VAR
 	i	: integer;
 	r	: real;
 BEGIN
-	namever :='Shadow v0.7   Copyright D Henderson 2017.';
+	namever :='Shadow v0.8   Copyright D Henderson 2017.';
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
 
 	initSettings ('Shadow.ini');
 
-	HighlightSS (entityss, true, false);
+!	HighlightSS (entityss, true, false);
 	north := GetSvdAng ('ShadowNorth', halfpi);
 	azimuth := GetSvdAng ('Shad_Azimuth', 0.0);
 	altitude :=GetSvdAng ('ShadAltitude', halfpi);
@@ -1679,7 +1740,7 @@ BEGIN
 		if ent_get (surface, entaddr(atr.lgladdr)) then
 			if surface.enttype = entply then
 				ss := true;
-				highlightsurface;
+!				highlightsurface;
 			end;
 		end;
 	end;
@@ -1715,7 +1776,10 @@ BEGIN
 		
 		lblset (5, 'Entities');
 		lblmsg (5, 'Select entities to cast shadows');
-		
+
+		lblset (6, 'Hilite');
+		lblmsg (6, 'Highlight Surface and Entities');
+
 		lblset (7, 'Surface');
 		lblmsg (7, 'Select polygon to define surface shadows are cast onto');
 		
@@ -1767,6 +1831,9 @@ BEGIN
 			SunsEye;
 		ELSIF key = f5 THEN
 			UserSelectSS;
+		ELSIF key = F6 THEN
+			HighlightSS (EntitySS, true, false);
+			HighlightEnt (surface, true, true);
 		ELSIF key = f7 THEN
 			GetSurface;
 		ELSIF key = f8 THEN
