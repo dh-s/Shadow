@@ -102,9 +102,9 @@ PROCEDURE msg_OK (msg : str255); BUILTIN 245;
 FUNCTION msg_dlg (msg : str255; msgDlgType, msgDlgButtons : integer) : integer; BUILTIN 246;
 
 
-FUNCTION RealEqual (r1, r2 : real) : boolean;
+FUNCTION RealEqual (r1, r2 : real; delta : real) : boolean;
 BEGIN
-	IF absr(r1-r2) <= ABSZero THEN
+	IF absr(r1-r2) <= delta THEN
 		return true;
 	END;
 	RETURN false;
@@ -538,8 +538,9 @@ PROCEDURE GetModMat (mat : IN OUT modmat; modaltitude : IN OUT real);
 VAR
 	h_rotation	: real;
 	i			: integer;
-	min, max	: point;
+	minp, maxp	: point;
 	tanang, ang	: real;
+	miny, maxy	: real;
 	matrotdone	: boolean;
 	sunvec		: array [0..1] of point;
 	rad, planang: real;
@@ -551,34 +552,64 @@ BEGIN
 	matrotdone := false;
 	! find the max & min x values of the points in the surface polygon - then use the corresponding points to create
 	! a rotation transformation around the y axis
-	min := surface.plyPnt[1];
-	max := min;
-	FOR i := 2 to surface.plyNpnt DO
-		if surface.plyPnt[i].x < min.x then
-			min := surface.plyPnt[i];
-		end;
-		if surface.plyPnt[i].x > max.x then
-			max := surface.plyPnt[i];
-		end;
-	END;
-	! check that min & max x values are different.  If not then surface is vertical and parallel
-	! to the y axis, so just a single rotation of -90 degrees around the y axis is required.
-	if RealEqual (min.x, max.x) then
+	ent_extent (surface, minp, maxp);
+
+	! check that minp & maxp x & y values are different.  If not then surface is vertical and parallel
+	! to either the y or x axis, so just a single rotation of -90 degrees around the y or x axis is required.
+	if RealEqual (minp.x, maxp.x, 0.01) then
 		setrotate (mat, -halfpi, y);
 		matrotdone := true;
+	elsif RealEqual (minp.y, maxp.y, 0.01) then
+		setrotate (mat, -halfpi, x);
+		matrotdone := true;
+	elsif RealEqual (minp.z, maxp.z, 0.01) then
+		settran (mat, 0.0, 0.0, 0.0);		! no rotation required
+		matrotdone := true;
 	else
-		! first rotate about the z axis so that the line between max & min is
+		! set minp & Maxp to the actual points with min & max x values.
+		minp := surface.plyPnt[1];
+		maxp := minp;
+		FOR i := 2 to surface.plyNpnt DO
+			if surface.plyPnt[i].x < minp.x then
+				minp := surface.plyPnt[i];
+			end;
+			if surface.plyPnt[i].x > maxp.x then
+				maxp := surface.plyPnt[i];
+			end;
+		END;
+	
+		! rotate about the z axis so that the line between max & min is
 		! parallel to the x axis
-		tanang := (max.y - min.y)/(max.x - min.x);
+		tanang := (maxp.y - minp.y)/(maxp.x - minp.x);
 		ang := atan(tanang);
-		setrotrel (mat, -ang, z, min);
+		setrotrel (mat, -ang, z, minp);
+		
+		! set up mod_surface by applying the transformation to surface
+		mod_surface := surface;
+		FOR i:=1 to mod_surface.plyNpnt DO
+			xformpt (surface.plyPnt[i], mat, mod_surface.plyPnt[i]);
+			if i= 1 then
+				miny := mod_surface.plyPnt[1].y;
+				maxy := mod_surface.plyPnt[1].y;
+			else
+				miny := min (miny, mod_surface.plyPnt[i].y);
+				maxy := max (maxy, mod_surface.plyPnt[i].y);
+			end;
+		END;
 
-		! then rotate about the y axis
-		xformpt (min, mat, min);
-		xformpt (max, mat, max);
-		tanang := (max.z - min.z)/(max.x - min.x);
-		ang := atan(tanang);
-		catrotrel (mat, ang, y, min);
+		if RealEqual (miny, maxy, 0.01) then
+			! it is vertical, and now parallel to the x axis, so just needs
+			! to be rotated about the x axis;
+			catrotate (mat, -halfpi, x);
+			matrotdone := true;
+		else
+			! not vertical, calculate rotatiou about the y axis
+			xformpt (minp, mat, minp);
+			xformpt (maxp, mat, maxp);
+			tanang := (maxp.z - minp.z)/(maxp.x - minp.x);
+			ang := atan(tanang);
+			catrotrel (mat, ang, y, minp);
+		end;
 	end;
 	
 	! set up mod_surface by applying the transformation to surface
@@ -591,17 +622,17 @@ BEGIN
 	! find the max & min y values of the points in the mod_surface polygon - then use the corresponding points
 	! to create a rotation transformation around the y axis
 	IF not matrotdone THEN
-		min := mod_surface.plyPnt[1];
-		max := min;
+		minp := mod_surface.plyPnt[1];
+		maxp := minp;
 		FOR i := 2 to mod_surface.plyNpnt DO
-			if mod_surface.plyPnt[i].y < min.y then
-				min := mod_surface.plyPnt[i];
+			if mod_surface.plyPnt[i].y < minp.y then
+				minp := mod_surface.plyPnt[i];
 			end;
-			if mod_surface.plyPnt[i].y > max.y then
-				max := mod_surface.plyPnt[i];
+			if mod_surface.plyPnt[i].y > maxp.y then
+				maxp := mod_surface.plyPnt[i];
 			end;
 		END;
-		tanang := (max.z - min.z	)/(max.y - min.y);
+		tanang := (maxp.z - minp.z	)/(maxp.y - minp.y);
 		ang := atan(tanang);
 		catrotate (mat, -ang, x);
 	END;
@@ -1410,7 +1441,7 @@ BEGIN
 		msg_OK ('Sorry: an unexpected error has occurred');
 		return;
 	end;
-	if RealEqual (mod_altitude, 0.0) or RealEqual (mod_altitude, pi) then
+	if RealEqual (mod_altitude, 0.0, 0.001) or RealEqual (mod_altitude, pi, 0.001) then
 		msg_OK ('Sun rays are parallel to surface');
 		msg_OK ('Cannot cast shadows');
 		return;
@@ -1703,7 +1734,7 @@ VAR
 	i	: integer;
 	r	: real;
 BEGIN
-	namever :='Shadow v0.8   Copyright D Henderson 2017.';
+	namever :='Shadow v0.8.1   Copyright D Henderson 2017.';
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
 
@@ -1713,7 +1744,7 @@ BEGIN
 	north := GetSvdAng ('ShadowNorth', halfpi);
 	azimuth := GetSvdAng ('Shad_Azimuth', 0.0);
 	altitude :=GetSvdAng ('ShadAltitude', halfpi);
-	if realequal (azimuth,ABSZero) or realequal(altitude, halfpi) then
+	if realequal (azimuth, 0.0, ABSZero) or realequal(altitude, halfpi, ABSZero) then
 		sunposmsg := '';
 		SaveStr ('ShadSunPosMg', sunposmsg, false);
 	else
