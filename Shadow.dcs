@@ -908,10 +908,10 @@ BEGIN
 				HighlightSS (entityss, true, false);
 			end;
 			SaveInt ('ShadEntSlSet', entityss, false);
-		elsif (key = s4) and (entityss > 0) then
+		elsif (key = s4) and (entityss >= 0) then
 			HighlightSS (entityss, false, false);
 			ssClear (entityss);
-		elsif (key = s5) and (entityss > 0) then
+		elsif (key = s5) and (entityss >= 0) then
 			lblsinit;
 			lblson;
 			ssGetName (entityss, tempstr);
@@ -924,7 +924,7 @@ BEGIN
 				ssSetName (entityss, tempstr);
 			end;
 			wrtmsg('');
-		elsif (key = s2) and (entityss > 0) then
+		elsif (key = s2) and (entityss >= 0) then
 			lblsinit;
 			while getmode ('add to Selection Set', ssmode, key) = res_normal do
 				addr := ent_first (ssmode);
@@ -936,7 +936,7 @@ BEGIN
 					end;
 				END;
 			end;
-			elsif (key = s3) and (entityss > 0) then
+			elsif (key = s3) and (entityss >= 0) then
 			lblsinit;
 			while getmode ('remove from Selection Set', ssmode, key) = res_normal do
 				addr := ent_first (ssmode);
@@ -1762,7 +1762,7 @@ BEGIN
 	namever :='Shadow v0.8.2   Copyright D Henderson 2017.';
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
-	showprogress := false;`! disabled as update of progress display was unreliable, even though processing was proceeding ok
+	showprogress := false; ! disabled as update of progress display was unreliable, even though processing was proceeding ok
 	
 	initSettings ('Shadow.ini');
 
