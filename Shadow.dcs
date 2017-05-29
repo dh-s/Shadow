@@ -707,7 +707,7 @@ BEGIN
 		if ent.enttype = entply then
 			! In some views different edges of the polygon may overlap each other on the display (as
 			! would happen in a vertical polygon in plan view for example). In this case it is possible
-			! then the dashes in one overlapping line could fill in the spaces in the other line, and so
+			! that the dashes in one overlapping line could fill in the spaces in the other line, and so
 			! the highlight does not display very well. To minimise this happening, we draw each edge 
 			! seperately and ensure that the lines are going in the same direction (not foolproof, but 
 			! reliable in the example of a vertical polygon in plan view, which is likely to be a 
@@ -909,7 +909,7 @@ BEGIN
 			end;
 			SaveInt ('ShadEntSlSet', entityss, false);
 		elsif (key = s4) and (entityss >= 0) then
-			HighlightSS (entityss, false, false);
+			Refresh;
 			ssClear (entityss);
 		elsif (key = s5) and (entityss >= 0) then
 			lblsinit;
@@ -942,10 +942,10 @@ BEGIN
 				addr := ent_first (ssmode);
 				WHILE ent_get (ent, addr) DO
 					addr := ent_next (ent, ssmode);
-					if ssDel (entityss, ent) then
-						HighlightEnt (ent, false, false);
-					end;
-				END;
+          if ssDel (entityss, ent) then
+             HighlightEnt (ent, false, false);
+           end;
+ 				END;
 			end;
 		end;
 	until false;
@@ -1035,11 +1035,7 @@ BEGIN
 		ent_update (shad);
 	end;
 	if hatchlines = 5 then
-		if hatchclr > 0 then
-			SolidFill (shad, hatchclr);
-		else
-			SolidFill (shad, shad.color);
-		end;
+		SolidFill (shad, shad.color);
 	end;
 	ssAdd (ssNum, shad);
 
@@ -1605,26 +1601,28 @@ BEGIN
 	! set centre of view at centre of entities
 	ll := view.viewcent;
 	tr := view.viewcent;
-	mode_init (modess);
-	mode_ss (modess, entityss);
-	mode_enttype (modess, entply);
-	addrss := ent_first (modess);
-	first := true;
-	WHILE ent_get (ent, addrss) DO
-		if first then
-			ent_extent (ent, ll, tr);
-		else
-			ent_extent (ent, ll2, tr2);
-			ll.x := min (ll.x, ll2.x);
-			ll.y := min (ll.y, ll2.y);
-			ll.z := min (ll.z, ll2.z);
-			tr.z := max (tr.z, tr2.z);
-			tr.y := max (tr.y, tr2.y);
-			tr.x := max (tr.x, tr2.x);
-			first := false;
-		end;
-		addrss := ent_next (ent, modess);
-	END;
+	if entityss >= 0 then
+		mode_init (modess);
+		mode_ss (modess, entityss);
+		mode_enttype (modess, entply);
+		addrss := ent_first (modess);
+		first := true;
+		WHILE ent_get (ent, addrss) DO
+			if first then
+				ent_extent (ent, ll, tr);
+			else
+				ent_extent (ent, ll2, tr2);
+				ll.x := min (ll.x, ll2.x);
+				ll.y := min (ll.y, ll2.y);
+				ll.z := min (ll.z, ll2.z);
+				tr.z := max (tr.z, tr2.z);
+				tr.y := max (tr.y, tr2.y);
+				tr.x := max (tr.x, tr2.x);
+				first := false;
+			end;
+			addrss := ent_next (ent, modess);
+		END;
+	end;
 	viewcent.x := ll.x + (tr.x - ll.x)/2.0;
 	viewcent.y := ll.y + (tr.y - ll.y)/2.0;
 	viewcent.z := ll.z + (tr.z - ll.z)/2.0;
@@ -1695,8 +1693,8 @@ BEGIN
 		lblsett (4, 'Net3', hatchlines = 3);
 		lblmsg (4, 'Hatch with 3 sets of parallel lines at 60 degrees to each other');
 		lblsett (6, 'Solid Fill', hatchlines = 5);
-		lblmsg (6, 'Fill shadows with solid fill');
-		if hatchlines > 0 then
+		lblmsg (6, 'Fill shadows with solid fill (same colour as outline)');
+		if hatchlines > 0 and hatchlines < 5 then
 			lblsett (9, 'Outln Clr', hatchclr < 0);
 			lblmsg (9, 'Hatch the same colour as the shadow outlines');
 			lblsett (10, 'Set Clr', hatchclr >= 0);
@@ -1708,19 +1706,17 @@ BEGIN
 				tempstr := 'Set hatch colour';
 			end;
 			lblmsg (10, tempstr);
-			
-			if hatchlines < 5 then
-				lblset (12, 'Spacing');
-				cvdisst (hatchspace, tempstr);
-				strins (tempstr, 'Set spacing between hatch lines (', 1);
-				strcat (tempstr, ')');
-				lblmsg (12, tempstr);
-				lblset (13, 'Angle');
-				cvangst (hatchang, tempstr);
-				strins (tempstr, 'Hatch angle relative to suns rays (', 1);
-				strcat (tempstr, ')');
-				lblmsg (13, tempstr);
-			end;
+
+			lblset (12, 'Spacing');
+			cvdisst (hatchspace, tempstr);
+			strins (tempstr, 'Set spacing between hatch lines (', 1);
+			strcat (tempstr, ')');
+			lblmsg (12, tempstr);
+			lblset (13, 'Angle');
+			cvangst (hatchang, tempstr);
+			strins (tempstr, 'Hatch angle relative to suns rays (', 1);
+			strcat (tempstr, ')');
+			lblmsg (13, tempstr);
 		end;
 		lblset (20, 'Exit');
 		lblson;
@@ -1759,14 +1755,13 @@ VAR
 	i	: integer;
 	r	: real;
 BEGIN
-	namever :='Shadow v0.8.2   Copyright D Henderson 2017.';
+	namever :='Shadow v0.8.4   Copyright D Henderson 2017.';
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
 	showprogress := false; ! disabled as update of progress display was unreliable, even though processing was proceeding ok
 	
 	initSettings ('Shadow.ini');
 
-!	HighlightSS (entityss, true, false);
 	north := GetSvdAng ('ShadowNorth', halfpi);
 	azimuth := GetSvdAng ('Shad_Azimuth', 0.0);
 	altitude :=GetSvdAng ('ShadAltitude', halfpi);
@@ -1793,11 +1788,13 @@ BEGIN
 
 	! check if a surface polygon has previously been selected for this drawing
 	ss := false;
+	setnil (surface.addr);
 	if atr_sysfind ('ShadSurface', atr) then
 		if ent_get (surface, entaddr(atr.lgladdr)) then
 			if surface.enttype = entply then
 				ss := true;
-!				highlightsurface;
+			else
+				setnil (surface.addr);
 			end;
 		end;
 	end;
@@ -1936,6 +1933,7 @@ BEGIN
 		ELSIF key = s6 THEN
 			GetShadowLyr;
 		ELSIF key = s8 THEN
+			wrtmsg ('Processing shadows ... please wait');
 			GenShadows;
 		ELSIF key = s9 THEN
 			!showprogress := not showprogress;
