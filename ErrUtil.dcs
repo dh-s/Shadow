@@ -49,6 +49,10 @@ BEGIN
 		strcat (msg, 'to the author (dhsoftware1@gmail.com) together with any other\r');
 		strcat (msg, 'details you are willing to share (e.g. drawing file)\r');
 		strcat (msg, '\rThank you');
+	elsif msgnum = 2 then 
+		msg := 'No entity types have been specified for shadow casting.\r\r';
+		strcat (msg, 'Go to Shadow Entities menu (F5) and then select Ent\r');
+		strcat (msg, 'Types (S8) to specify types of entities to cast shadows.\r');
 	else
 		msg := 'An error of some sort has happened when running the macro.\r\r';
 		strcat (msg, 'Please advise the author (dhsoftware1@gmail.com) including\r');

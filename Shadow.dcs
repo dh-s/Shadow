@@ -75,13 +75,13 @@ VAR
 	str, str1	: string(64);
 	done		: boolean;
 
-	!surfacess	: integer;
 	entityss	: integer;
-	ss		: boolean;	! flags to indicate if a surface & entities have been selected
-	
+	ss				: boolean;	! flags to indicate if a surface has been selected
+
 	origin		: point;
 	tempstr		: str255;
-	
+	tempbln		: boolean;
+
 	colour		: integer;
 	entclr		: integer;
 	trim			: boolean;
@@ -97,6 +97,10 @@ VAR
 	vertical	: boolean;
 	toponly		: boolean;
 	showprogress : boolean;
+	
+	doPly			: boolean;
+	doLin			: boolean;
+	doLn3			: boolean;
 
 	
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
@@ -129,6 +133,50 @@ BEGIN
 		END;
 	END;
 END RemoveChars;
+
+PROCEDURE EncodeEntTyp (str : IN OUT string);
+BEGIN
+	str := '';
+	if doPly then
+		strcat (str, 'Y');
+	else
+		strcat (str, 'N');
+	end;
+	if doLin then
+		strcat (str, 'Y');
+	else
+		strcat (str, 'N');
+	end;
+	if doLn3 then
+		strcat (str, 'Y');
+	else
+		strcat (str, 'N');
+	end;
+END EncodeEntTyp;
+
+PROCEDURE DecodeEntTyp (str : string);
+VAR
+	s	: str8;
+BEGIN
+	if strlen(str) >= 1 then
+		strsub (str, 1, 1, s);
+		doPly := strpos ('Y', s, 1) = 1;
+	else
+		doPly := true;
+	end;
+	if strlen(str) >= 2 then
+		strsub (str, 2, 1, s);
+		doLin := strpos ('Y', s, 1) = 1;
+	else
+		doLin := true;
+	end;
+	if strlen(str) >= 3 then
+		strsub (str, 3, 1, s);
+		doLn3 := strpos ('Y', s, 1) = 1;
+	else
+		doLn3 := true;
+	end;
+END DecodeEntTyp;
 
 PROCEDURE GetNorth;
 VAR
@@ -688,6 +736,14 @@ VAR
 BEGIN
 	if isnil (ent.addr) then
 		return;
+	elsif surface and ent.enttype <> entply then
+		return;
+	elsif not surface then
+		if not ((ent.enttype = entply and doply) or
+						(ent.enttype = entlin and doLin) or
+						(ent.enttype = entln3 and doLn3)) then
+			return;
+		end;
 	end;
 	SvWgt := showwgt;
 	showwgt := true;
@@ -864,9 +920,40 @@ BEGIN
 	UNTIL false;
 END GetSurface;
 
+PROCEDURE SelectEntTypes;
+VAR
+	key		: integer;
+	s			: str255;
+BEGIN
+	EncodeEntTyp (s);
+	repeat
+		lblsinit;
+		lblsett (1, '2D Line', doLin);
+		lblsett (3, '3D Line', doLn3);
+		lblsett (4, 'Polygon', doPly);
+		lblset (20, 'Exit');
+		getesc (key);
+		if key = f1 then
+			doLin := not doLin;
+		elsif key = f3 then
+			doLn3 := not doLn3;
+		elsif key = f4 then
+			doPly := not doPly;
+		end;
+		EncodeEntTyp (tempstr);
+		SaveStr ('ShadowEntTps', tempstr, true);
+		if key = s0 then
+			if entityss >= 0 and not strcomp (s, tempstr, -1) then
+				refresh;
+				HighlightSS (entityss, true, false);
+			end;
+			return;
+		end;
+	until false;
+END SelectEntTypes;
 
 PROCEDURE UserSelectSS;
-var
+VAR
 	i, key		: integer;
 	name		: string(16);
 	ssmode		: mode_type;
@@ -891,6 +978,26 @@ BEGIN
 			lblmsg (14, 'Clear selection set');
 			lblset (15, 'Rename');
 			lblmsg (15, 'Rename Selection Set');
+			lblset (18, 'Ent Types');
+			tempstr := 'Select entity types to cast shadows (';
+			tempbln := false;
+			if doply then
+				strcat (tempstr, 'Ply,');
+				tempbln := true;
+			end;
+			if doLn3 then
+				strcat (tempstr, '3D Lin,');
+				tempbln := true;
+			end;
+			if doLin then
+				strcat (tempstr, '2D Lin,');
+				tempbln := true;
+			end;
+			if tempbln then
+				strdel (tempstr, strlen(tempstr), 1);
+			end;
+			strcat (tempstr, ')');
+			lblmsg (18, tempstr);
 		end;
 		lblset (20, 'Exit');
 		wrtmsg ('Choose Selection Set to use for Shadow Entities');
@@ -936,7 +1043,7 @@ BEGIN
 					end;
 				END;
 			end;
-			elsif (key = s3) and (entityss >= 0) then
+		elsif (key = s3) and (entityss >= 0) then
 			lblsinit;
 			while getmode ('remove from Selection Set', ssmode, key) = res_normal do
 				addr := ent_first (ssmode);
@@ -947,6 +1054,8 @@ BEGIN
            end;
  				END;
 			end;
+		elsif (key = s8) then
+			SelectEntTypes;
 		end;
 	until false;
 END UserSelectSS;
@@ -997,9 +1106,76 @@ BEGIN
 	Append2DigitStr (mi);
 	strcat (symname, ':');
 	Append2DigitStr (s);
-	RemoveChars (symname, '"\'');	!'! Remove single and double quote characters which may be in the string as a result of the cvangst calls.
-									  ! (if left in the symbol name these characters will cause the DataCAD drawing to crash)
+	RemoveChars (symname, '"\'');	! Remove single and double quote characters which may be in the string as a result of the cvangst calls.
+																! (if left in the symbol name these characters will cause the DataCAD drawing to crash)
 END SetShadSymbolName;
+
+
+FUNCTION CreateShadLn3 (p1, p2 : point; shad : IN OUT entity) : boolean;
+BEGIN
+	if PntsEqual (p1, p2, 0.1) then
+		! do not create really small lines ...
+		return false;
+	end;
+	ent_init (shad, entln3);
+	shad.ln3pt1 := p1;
+	shad.ln3pt2 := p2;
+	ent_add (shad);
+	if colour >= 0 or colour < -1000 then
+		shad.color := entclr;
+		ent_update (shad);
+	end;
+	return true;
+END CreateShadLn3;
+
+FUNCTION CreateTrimmedLn3 (p1, p2 : point; 
+													 Surf : array of point; Surfnpnt : integer;
+													 ShadEnt : IN OUT entity) : integer;
+!!! returns 0 when a shadow is created
+!!! returns -1 when no shadow is ceated
+VAR
+	pnts			: pntarr;
+	npnts			: integer;
+	i, j			: integer;
+	pnt				: point;
+	result		: integer;
+BEGIN
+	pnts[1] := p1;
+	npnts := 1;
+	for i := 1 to Surfnpnt do
+		j := i+1;
+		if j > Surfnpnt then
+			j := 1;
+		end;
+		if intr_linlin (p1, p2, Surf[i], Surf[j], pnts[npnts+1], true) then
+			if not pntsequal (p1, pnts[npnts+1], ABSZero) or pntsequal (p1, pnts[npnts+1], ABSZero) then
+				npnts := npnts+1;
+			end;
+		end;
+	end;
+	npnts := npnts+1;
+	pnts[npnts] := p2;
+	if npnts > 2 then
+		sortpnts (pnts, npnts, true);
+	end;
+	result := -1;
+	if npnts < 2 then
+		return result;
+	end;
+	for i := 1 to npnts-1 do
+		! check if midpoint of line segment is inside surf - if so then add line segment
+		j := i+1;
+		pnt.x := pnts[i].x + (pnts[j].x - pnts[i].x)/2.0;
+		pnt.y := pnts[i].y + (pnts[j].y - pnts[i].y)/2.0;
+		pnt.z := pnts[i].z + (pnts[j].z - pnts[i].z)/2.0;
+		if PntInPly (pnt, Surf, Surfnpnt) >= 0 then
+			if CreateShadLn3 (pnts[i], pnts[j], ShadEnt) then
+				result := 0;
+			end;
+		end;
+	end;
+	return result;
+END CreateTrimmedLn3;
 
 
 PROCEDURE CreateShadPln (pnts : array of point; npnt : integer; shad : IN OUT entity);
@@ -1013,9 +1189,6 @@ BEGIN
 	end;
   
 	! create a polyline entity with these points
-	if colour > 0 then
-		entclr := colour;
-	end;
 	ent_init (shad, entPln);
 	shad.plnbase := 0.0;
 	shad.plnhite := 0.0;
@@ -1054,10 +1227,9 @@ BEGIN
 	end;
 END CreateShadPln;
 
-
-FUNCTION CreateTrimmedShad (Shad : array of point; Shadnpnt : integer;
-														Surf : array of point; Surfnpnt : integer;
-														ShadEnt : IN OUT entity) : integer;
+FUNCTION CreateTrimmedPln (Shad : array of point; Shadnpnt : integer;
+													 Surf : array of point; Surfnpnt : integer;
+													 ShadEnt : IN OUT entity) : integer;
 !!! returns 1 when the shadow covers the whole surface
 !!! returns 0 when the shadow covers part of the surface
 !!! returns -1 when no shadow is cast on the surface
@@ -1248,7 +1420,7 @@ BEGIN
 			end;
 		end;
 		if iterations > 249 then
-			delta := 0.00001;	! try a bigger delta if excessive iterations (should never happen??)
+			delta := 0.01;	! try a bigger delta if excessive iterations (should never happen??)
 		end;
 	until not GetNextSide or iterations > 449;
 	
@@ -1265,7 +1437,7 @@ BEGIN
 		return -1;
 	end;
 	return 1;		! shouldn't actually ever get here ...
-END CreateTrimmedShad;
+END CreateTrimmedPln;
 
 
 PROCEDURE GenShadows;
@@ -1321,18 +1493,37 @@ VAR
 		end;
 		
 		!set up points as being the points of castent with the modelling matrix applied
-		npoints := castent.plyNpnt;
 		below := false;
-		abovepnt := 0;
+		if castent.enttype = entply then
+			npoints := castent.plyNpnt;
+			abovepnt := 0;
+			for i := 1 to npoints do
+				xformpt (castent.plyPnt[i], mat, points[i]);
+			end;
+		elsif castent.enttype = entlin then
+			npoints := 4;
+			xformpt (castent.linpt1, mat, points[1]);
+			points[2] := castent.linpt1;
+			points[2].z := castent.linpt2.z;
+			xformpt (points[2], mat, points[2]);
+			xformpt (castent.linpt2, mat, points[3]);
+			points[4] := castent.linpt2;
+			points[4].z := castent.linpt1.z;
+			xformpt (points[4], mat, points[4]);
+		elsif castent.enttype = entln3 then
+			npoints := 2;
+			xformpt (castent.ln3Pt1, mat, points[1]);
+			xformpt (castent.ln3Pt2, mat, points[2]);
+		end;
+
 		for i := 1 to npoints do
-			xformpt (castent.plyPnt[i], mat, points[i]);
 			if points[i].z < 0.0 then
 				below := true;
 			elsif abovepnt=0 then
 				abovepnt := i;
 			end;
 		end;
-		
+
 		if abovepnt = 0 then	! no points found that were above the surface
 			npoints := 0;
 			return false;
@@ -1340,7 +1531,7 @@ VAR
 
 		if below then
 			i := 1;
-			while i <= npoints do
+			while (i <= npoints and castent.enttype <> entln3)  or (castent.enttype = entln3 and i < npoints) do
 				j := i+1;
 				if j > npoints then
 					j := 1;
@@ -1398,9 +1589,17 @@ VAR
 
 		! create polyline entity(s) with these points
 		if trim then
-			if CreateTrimmedShad (points, npoints, surfacepnts, surface.plynpnt, shad) = -1 then
-				return false;
+			if castent.enttype = entln3 then
+				if CreateTrimmedLn3 (points[1], points[2], surfacepnts, surface.plynpnt, shad) = -1 then
+					return false;
+				end;
+			else
+				if CreateTrimmedPln (points, npoints, surfacepnts, surface.plynpnt, shad) = -1 then
+					return false;
+				end;
 			end;
+		elsif castent.enttype = entln3 then
+			return CreateShadLn3 (points[1], points[2], shad);
 		else
 			CreateShadPln (points, npoints, shad);
 		end;
@@ -1418,9 +1617,13 @@ BEGIN
 	elsif entityss < 0 then
 		msg_OK ('You must select entities to cast shadows of');
 		return;
+	elsif not (doPly or doLin or doLn3) then
+		DisplayVerboseMsg (2);
+		return;
 	end;
-
+	
 	! if we get here then it looks like we are ready to cast shadows
+	wrterr ('Processing shadows ... please wait');
 	if showprogress then
 		wrtmsg ('Calculating surface and sun position');
 	end;
@@ -1458,7 +1661,10 @@ BEGIN
 	addr := ent_first (entmode);
 	entnum := 0;
 	WHILE ent_get (ent, addr) and shadowcreated < 32750 DO
-		IF ent.enttype = entply and ent.addr <> surface.addr THEN		! we are only processing polygons ... ignore any other entities
+		IF (ent.addr <> surface.addr) and 
+			 (((ent.enttype = entply) and doPly) or 
+			  ((ent.enttype = entlin) and doLin) or 
+				((ent.enttype = entln3) and doLn3))THEN
 			IF showprogress THEN
 				entnum := entnum+1;
 				cvintst (entnum, str);
@@ -1466,15 +1672,23 @@ BEGIN
 				wrtmsg (str);
 			END;
 			extent1 := true;
-			entclr := ent.color;
+
+			if colour > 0 then
+				entclr := colour;
+			else
+				entclr := ent.color;
+			end;
+
 			IF Cast (ent, shadow) THEN
 				shadowcreated := shadowcreated+1;
-				! process any voids
-				v_addr := ent.plyfrstvoid;
-				WHILE void_get (v_ent, v_addr) DO
-					b := Cast (v_ent, v_shad);
-					v_addr := v_ent.next;
-				END;
+				if ent.enttype = entply then
+					! process any voids
+					v_addr := ent.plyfrstvoid;
+					WHILE void_get (v_ent, v_addr) DO
+						b := Cast (v_ent, v_shad);
+						v_addr := v_ent.next;
+					END;
+				end;
 			END;
 			
 			if hatchlines > 0 and hatchlines < 5 then
@@ -1539,11 +1753,7 @@ BEGIN
 		! (the symbol itself will be rotated back into position using invmat once it is inserted)
 		SetShadSymbolName (symname);
 		mode_init (shadmode);
-		if hatchlines = 5 then
-			mode_ss (shadmode, ssNum);
-		else
-			mode_group (shadmode, shadow);
-		end;
+		mode_group (shadmode, shadow);
 		if showprogress then
 			wrtmsg ('Creating Symbol');
 		end;
@@ -1567,6 +1777,7 @@ BEGIN
 		end;
 		wrterr (str);
 	else
+		wrterr ('');
 		msg_OK ('No shadows cast on this surface by entity(s)');
 	end;
 	lyr_set (svlyr);
@@ -1754,8 +1965,9 @@ PROCEDURE Initialise;
 VAR
 	i	: integer;
 	r	: real;
+	s : str80;
 BEGIN
-	namever :='Shadow v0.8.4   Copyright D Henderson 2017.';
+	namever :='Shadow v0.8.5   Copyright D Henderson 2017.';
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
 	showprogress := false; ! disabled as update of progress display was unreliable, even though processing was proceeding ok
@@ -1785,6 +1997,9 @@ BEGIN
   entityss := GetSvdInt ('ShadEntSlSet', -1);
 
 	trim := GetSvdBln ('ShadTrim', true);
+
+	GetSvdStr ('ShadowEntTps', '', s);
+	DecodeEntTyp (s);
 
 	! check if a surface polygon has previously been selected for this drawing
 	ss := false;
@@ -1831,6 +2046,28 @@ BEGIN
 		lblset (5, 'Entities');
 		if entityss >=0 then
 			ssGetName (entityss, tempstr);
+			tempbln := false;
+			if not doPly then
+				strcat (tempstr, ', exclude Ply');
+				tempbln := true;
+			end;
+			if not doLin then
+				if not tempbln then
+					strcat (tempstr, ', exclude 2D Lin');
+					tempbln := true;
+				else
+					strcat (tempstr, ', 2D Lin');
+				end;
+			end;
+			if not doLn3 then
+				if not tempbln then
+					strcat (tempstr, ', exclude 3D Lin');
+					tempbln := true;
+				else
+					strcat (tempstr, ', 3D Lin');
+				end;
+			end;
+			
 			strins (tempstr, ' (', 1);
 			strcat (tempstr, ')');
 		else
@@ -1933,7 +2170,6 @@ BEGIN
 		ELSIF key = s6 THEN
 			GetShadowLyr;
 		ELSIF key = s8 THEN
-			wrtmsg ('Processing shadows ... please wait');
 			GenShadows;
 		ELSIF key = s9 THEN
 			!showprogress := not showprogress;
