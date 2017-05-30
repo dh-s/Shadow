@@ -90,7 +90,7 @@ BEGIN
 	text.txtslant := 0.0;
 	text.txtbase := 0.0;
 	text.txthite := 0.0;
-	getcurrfont (text.txtfont);
+	text.txtfont := 'Roman';
 	strassign (text.txtstr, txt);
 	text.txtpnt.z := 0.0;
 	text.txtang := 0.0;
