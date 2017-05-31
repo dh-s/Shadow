@@ -33,7 +33,7 @@ BEGIN
 	return true;
 END DisplayFileError;
 
-PROCEDURE DisplayVerboseMsg (msgnum : integer);		PUBLIC;
+PROCEDURE DisplayVerboseMsg (msgnum : integer; param : string);		PUBLIC;
 !!! error to display identified by msgnum. 
 !!! Note that although DCAL supports strings up to 255 chars, the max hard-coded string length the compiler
 !!! will accept is 80. So need to build up longer strings using strcat etc.
@@ -53,6 +53,14 @@ BEGIN
 		msg := 'No entity types have been specified for shadow casting.\r\r';
 		strcat (msg, 'Go to Shadow Entities menu (F5) and then select Ent\r');
 		strcat (msg, 'Types (S8) to specify types of entities to cast shadows.\r');
+	elsif msgnum = 3 then
+		msg := 'CANNOT FIND SURFACE POLYGON\r\r';
+		strcat (msg, 'Looks like you previously selected a polygon as\r');
+		strcat (msg, 'shadow surface in this drawing, but the polygon\r');
+		strcat (msg, 'cannot be found (maybe you\'ve deleted it?)\r\r');
+		strcat (msg, 'Setting surface to a horizontal plane at ');
+		strcat (msg, param);
+		strcat (msg, '.\r');
 	else
 		msg := 'An error of some sort has happened when running the macro.\r\r';
 		strcat (msg, 'Please advise the author (dhsoftware1@gmail.com) including\r');

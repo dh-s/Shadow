@@ -101,7 +101,9 @@ VAR
 	doPly			: boolean;
 	doLin			: boolean;
 	doLn3			: boolean;
-
+	
+	zplane		: boolean;
+	zheight		: real;
 	
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
 FUNCTION msg_dlg (msg : str255; msgDlgType, msgDlgButtons : integer) : integer; BUILTIN 246;
@@ -602,100 +604,103 @@ VAR
 											! which makes it easy to modify the sun direction using a modelling matrix
 											! to modify the points.
 BEGIN
-	matrotdone := false;
-	! find the max & min x values of the points in the surface polygon - then use the corresponding points to create
-	! a rotation transformation around the y axis
-	ent_extent (surface, minp, maxp);
-
-	! check that minp & maxp x & y values are different.  If not then surface is vertical and parallel
-	! to either the y or x axis, so just a single rotation of -90 degrees around the y or x axis is required.
-	if RealEqual (minp.x, maxp.x, 0.01) then
-		setrotate (mat, -halfpi, y);
-		matrotdone := true;
-	elsif RealEqual (minp.y, maxp.y, 0.01) then
-		setrotate (mat, -halfpi, x);
-		matrotdone := true;
-	elsif RealEqual (minp.z, maxp.z, 0.01) then
-		settran (mat, 0.0, 0.0, 0.0);		! no rotation required
-		matrotdone := true;
+	if zplane then
+		settran (mat, 0.0, 0.0, -zheight);
 	else
-		! set minp & Maxp to the actual points with min & max x values.
-		minp := surface.plyPnt[1];
-		maxp := minp;
-		FOR i := 2 to surface.plyNpnt DO
-			if surface.plyPnt[i].x < minp.x then
-				minp := surface.plyPnt[i];
+		matrotdone := false;
+		! find the max & min x values of the points in the surface polygon - then use the corresponding points to create
+		! a rotation transformation around the y axis
+		ent_extent (surface, minp, maxp);
+
+		! check that minp & maxp x & y values are different.  If not then surface is vertical and parallel
+		! to either the y or x axis, so just a single rotation of -90 degrees around the y or x axis is required.
+		if RealEqual (minp.x, maxp.x, 0.01) then
+			setrotate (mat, -halfpi, y);
+			matrotdone := true;
+		elsif RealEqual (minp.y, maxp.y, 0.01) then
+			setrotate (mat, -halfpi, x);
+			matrotdone := true;
+		elsif RealEqual (minp.z, maxp.z, 0.01) then
+			settran (mat, 0.0, 0.0, 0.0);		! no rotation required
+			matrotdone := true;
+		else
+			! set minp & Maxp to the actual points with min & max x values.
+			minp := surface.plyPnt[1];
+			maxp := minp;
+			FOR i := 2 to surface.plyNpnt DO
+				if surface.plyPnt[i].x < minp.x then
+					minp := surface.plyPnt[i];
+				end;
+				if surface.plyPnt[i].x > maxp.x then
+					maxp := surface.plyPnt[i];
+				end;
+			END;
+		
+			! rotate about the z axis so that the line between max & min is
+			! parallel to the x axis
+			tanang := (maxp.y - minp.y)/(maxp.x - minp.x);
+			ang := atan(tanang);
+			setrotrel (mat, -ang, z, minp);
+			
+			! set up mod_surface by applying the transformation to surface
+			mod_surface := surface;
+			FOR i:=1 to mod_surface.plyNpnt DO
+				xformpt (surface.plyPnt[i], mat, mod_surface.plyPnt[i]);
+				if i= 1 then
+					miny := mod_surface.plyPnt[1].y;
+					maxy := mod_surface.plyPnt[1].y;
+				else
+					miny := min (miny, mod_surface.plyPnt[i].y);
+					maxy := max (maxy, mod_surface.plyPnt[i].y);
+				end;
+			END;
+
+			if RealEqual (miny, maxy, 0.01) then
+				! it is vertical, and now parallel to the x axis, so just needs
+				! to be rotated about the x axis;
+				catrotate (mat, -halfpi, x);
+				matrotdone := true;
+			else
+				! not vertical, calculate rotatiou about the y axis
+				xformpt (minp, mat, minp);
+				xformpt (maxp, mat, maxp);
+				tanang := (maxp.z - minp.z)/(maxp.x - minp.x);
+				ang := atan(tanang);
+				catrotrel (mat, ang, y, minp);
 			end;
-			if surface.plyPnt[i].x > maxp.x then
-				maxp := surface.plyPnt[i];
-			end;
-		END;
-	
-		! rotate about the z axis so that the line between max & min is
-		! parallel to the x axis
-		tanang := (maxp.y - minp.y)/(maxp.x - minp.x);
-		ang := atan(tanang);
-		setrotrel (mat, -ang, z, minp);
+		end;
 		
 		! set up mod_surface by applying the transformation to surface
 		mod_surface := surface;
 		FOR i:=1 to mod_surface.plyNpnt DO
 			xformpt (surface.plyPnt[i], mat, mod_surface.plyPnt[i]);
-			if i= 1 then
-				miny := mod_surface.plyPnt[1].y;
-				maxy := mod_surface.plyPnt[1].y;
-			else
-				miny := min (miny, mod_surface.plyPnt[i].y);
-				maxy := max (maxy, mod_surface.plyPnt[i].y);
-			end;
-		END;
+		END;	
 
-		if RealEqual (miny, maxy, 0.01) then
-			! it is vertical, and now parallel to the x axis, so just needs
-			! to be rotated about the x axis;
-			catrotate (mat, -halfpi, x);
-			matrotdone := true;
-		else
-			! not vertical, calculate rotatiou about the y axis
-			xformpt (minp, mat, minp);
-			xformpt (maxp, mat, maxp);
-			tanang := (maxp.z - minp.z)/(maxp.x - minp.x);
+		! add a rotation around the x axis if required
+		! find the max & min y values of the points in the mod_surface polygon - then use the corresponding points
+		! to create a rotation transformation around the y axis
+		IF not matrotdone THEN
+			minp := mod_surface.plyPnt[1];
+			maxp := minp;
+			FOR i := 2 to mod_surface.plyNpnt DO
+				if mod_surface.plyPnt[i].y < minp.y then
+					minp := mod_surface.plyPnt[i];
+				end;
+				if mod_surface.plyPnt[i].y > maxp.y then
+					maxp := mod_surface.plyPnt[i];
+				end;
+			END;
+			tanang := (maxp.z - minp.z	)/(maxp.y - minp.y);
 			ang := atan(tanang);
-			catrotrel (mat, ang, y, minp);
-		end;
-	end;
-	
-	! set up mod_surface by applying the transformation to surface
-	mod_surface := surface;
-	FOR i:=1 to mod_surface.plyNpnt DO
-		xformpt (surface.plyPnt[i], mat, mod_surface.plyPnt[i]);
-	END;	
-
-	! add a rotation around the x axis if required
-	! find the max & min y values of the points in the mod_surface polygon - then use the corresponding points
-	! to create a rotation transformation around the y axis
-	IF not matrotdone THEN
-		minp := mod_surface.plyPnt[1];
-		maxp := minp;
-		FOR i := 2 to mod_surface.plyNpnt DO
-			if mod_surface.plyPnt[i].y < minp.y then
-				minp := mod_surface.plyPnt[i];
-			end;
-			if mod_surface.plyPnt[i].y > maxp.y then
-				maxp := mod_surface.plyPnt[i];
-			end;
+			catrotate (mat, -ang, x);
 		END;
-		tanang := (maxp.z - minp.z	)/(maxp.y - minp.y);
-		ang := atan(tanang);
-		catrotate (mat, -ang, x);
-	END;
-	
-	! apply the transformation to a point on the polygon to determine the 
-	! new z height
-	xformpt (surface.plyPnt[1], mat, mod_surface.plyPnt[1]);
-	! add an additional transformation to move to z height of zero
-	cattran (mat, 0.0, 0.0, -mod_surface.plypnt[1].z);
-
+		
+		! apply the transformation to a point on the polygon to determine the 
+		! new z height
+		xformpt (surface.plyPnt[1], mat, mod_surface.plyPnt[1]);
+		! add an additional transformation to move to z height of zero
+		cattran (mat, 0.0, 0.0, -mod_surface.plypnt[1].z);
+	end;
 	! now set up the sun angles as a vector and apply modmat to it ... this
 	! makes it easy to modify the sun position with the modelling matrix.
 	setpoint (sunvec[1], 0.0);
@@ -720,8 +725,6 @@ BEGIN
 	IF sunvec[0].z < sunvec[1].z THEN
 		catrotate (mat, pi, x);
 	END;
-
-
 END GetModMat;
 
 
@@ -865,15 +868,26 @@ VAR
 	bl, tr	: point; 
 BEGIN
 	Refresh; 	! remove any existing higlighted surface
-	HighlightEnt (surface, true, true);
+	if not zplane then
+		HighlightEnt (surface, true, true);
+	end;
 	svsurface := surface;
 	REPEAT
 		lblsinit;
+		lblsett (1, 'Fixed Z', zplane);
+		tempstr := 'Cast shadows on an infinite horzontal plane';
+		if zplane then
+			strcat (tempstr, ' (z=');
+			cvdisst (zheight, str);
+			strcat (tempstr, str);
+			strcat (tempstr, ')');
+		end;
+		lblmsg (1, tempstr);
 		lblsett (8, 'Top Only', toponly);
 		lblmsg (8, 'Cast shadows on upper surface only of non-vertical polygons');
 		lblset (20, 'Exit');
 		lblson;
-		wrtmsg ('Select polygon to cast shadows onto');
+		wrtmsg ('Select polygon to cast shadows onto (or choose \'Fixed Z\'');
 		res := getpoint (pt, key);
 		IF res = res_normal THEN
 			mode_init (mode);
@@ -892,6 +906,7 @@ BEGIN
 					atr.lgladdr := lgl_addr(surface.addr);
 					atr_update (atr);
 					ss := true;
+					zplane := false;
 				else
 					atr_init (atr, atr_addr);
 					atr.name := 'ShadSurface';
@@ -915,6 +930,14 @@ BEGIN
 				RETURN;
 			ELSIF key = f8 THEN
 				toponly := not toponly;
+			ELSIF key = f1 THEN
+				zplane := true;
+				lblsinit;
+				lblson;
+				wrtmsg ('Enter height of z plane: ');
+				getdis (zheight);
+				SaveBln ('ShadZedPlane',zplane, true);
+				SaveRl ('ShadZedHight', zheight, true);
 			END;
 		END;
 	UNTIL false;
@@ -944,6 +967,8 @@ BEGIN
 		SaveStr ('ShadowEntTps', tempstr, true);
 		if key = s0 then
 			if entityss >= 0 and not strcomp (s, tempstr, -1) then
+				lblsinit;
+				lblson;
 				refresh;
 				HighlightSS (entityss, true, false);
 			end;
@@ -961,6 +986,8 @@ VAR
 	ent			: entity;
 BEGIN
 	Refresh;
+	lblsinit;
+	lblson;
 	HighlightSS (entityss, true, false);
 	repeat
 		wrtlvl ('Shadow Entities');
@@ -1433,7 +1460,7 @@ BEGIN
 			tempent.color := clryellow;
 			ent_draw_dl (tempent, drmode_white, true);
 		end;
-		DisplayVerboseMsg (1);
+		DisplayVerboseMsg (1, '');
 		return -1;
 	end;
 	return 1;		! shouldn't actually ever get here ...
@@ -1588,7 +1615,7 @@ VAR
 		end;
 
 		! create polyline entity(s) with these points
-		if trim then
+		if trim and (not zplane) then
 			if castent.enttype = entln3 then
 				if CreateTrimmedLn3 (points[1], points[2], surfacepnts, surface.plynpnt, shad) = -1 then
 					return false;
@@ -1608,17 +1635,14 @@ VAR
 	END Cast;
 	
 BEGIN
-	if (not ss) and (entityss < 0) then
-		msg_OK ('Entities and Surface to cast onto must be selected first');
+	if (entityss < 0) then
+		msg_OK ('Entities to create shadows for have not been selected');
 		return;
-	elsif not ss then
-		msg_OK ('You must select a surface to cast shadows onto');
-		return;
-	elsif entityss < 0 then
-		msg_OK ('You must select entities to cast shadows of');
+	elsif (not zplane) and not ss then
+		msg_OK ('Please select a shadow surface');	! I don't think this can ever happen, but just in case ...
 		return;
 	elsif not (doPly or doLin or doLn3) then
-		DisplayVerboseMsg (2);
+		DisplayVerboseMsg (2, '');
 		return;
 	end;
 	
@@ -2000,6 +2024,9 @@ BEGIN
 
 	GetSvdStr ('ShadowEntTps', '', s);
 	DecodeEntTyp (s);
+	
+	zplane := GetSvdBln ('ShadZedPlane', true);
+	zheight := GetSvdRl ('ShadZedHight', 0.0);
 
 	! check if a surface polygon has previously been selected for this drawing
 	ss := false;
@@ -2008,9 +2035,15 @@ BEGIN
 		if ent_get (surface, entaddr(atr.lgladdr)) then
 			if surface.enttype = entply then
 				ss := true;
-			else
-				setnil (surface.addr);
 			end;
+		end;
+	end;
+	if not ss then
+		setnil (surface.addr);
+		if not zplane then 
+			zplane := true;
+			cvdisst (zheight, tempstr);
+			DisplayVerboseMsg (3, tempstr);
 		end;
 	end;
 END Initialise;
@@ -2080,10 +2113,21 @@ BEGIN
 		lblmsg (6, 'Highlight Surface and Entities');
 
 		lblset (7, 'Surface');
-		lblmsg (7, 'Select polygon to define surface shadows are cast onto');
+		tempstr := 'Define surface shadows are cast onto (';
+		if zplane then
+			strcat (tempstr, 'horizontal plane at ');
+			cvdisst (zheight, str);
+			strcat (tempstr, str);
+			strcat (tempstr, ')');
+		else
+			strcat (tempstr, 'polygon selected)');
+		end;
+		lblmsg (7, tempstr);
 		
-		lblsett (8, 'Trim Shadow', trim);
-		lblmsg (8, 'Trim Shadow to surface polygon');
+		if not zplane then
+			lblsett (8, 'Trim Shadow', trim);
+			lblmsg (8, 'Trim Shadow to surface polygon');
+		end;
 		
 		lblsett (10, 'Hatch', hatchlines > 0);
 		tempstr := 'Hatch the shadows';
@@ -2149,8 +2193,10 @@ BEGIN
 		ELSIF key = f7 THEN
 			GetSurface;
 		ELSIF key = f8 THEN
-			trim := not trim;
-			SaveBln ('ShadTrim', trim, true);
+			if not zplane then
+				trim := not trim;
+				SaveBln ('ShadTrim', trim, true);
+			end;
 		ELSIF key = f0 THEN
 			HatchSettings;
 		ELSIF key = s3 THEN
