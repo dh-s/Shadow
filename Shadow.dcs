@@ -107,6 +107,7 @@ VAR
 	
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
 FUNCTION msg_dlg (msg : str255; msgDlgType, msgDlgButtons : integer) : integer; BUILTIN 246;
+PROCEDURE execAndWait ( prog : str255; Visibility: integer; returnCode : OUT integer); BUILTIN 632;
 
 PROCEDURE Refresh;
 BEGIN
@@ -301,29 +302,36 @@ VAR
 	fl			: file;
 	res, key	: integer;
 	desc		: str80;
-	lbl, str	: string(16);
+	lbl, str	: string(24);
 	path		: str255;
 	filename	: str255;
 	buf			: dosbuf;
 	b			: boolean;
 BEGIN
 	lbl := '';	! default to blank label to stop old values hanging around
+	b := false;
 	REPEAT
 		lblsinit;
 		lblset (20, 'Exit');
 		wrtmsg ('Enter function key label: ');
 		lblson;
-		res := dgetstr (lbl, 16, key);
+		res := dgetstr (lbl, 24, key);
 		wrterr ('');
 		IF res = res_escape THEN
 			IF key = s0 THEN
 				wrtmsg('');
 				return;
 			END;
-		ELSIF strlen(lbl) = 0 THEN		! blank string was entered. Cannot proceed to save with a blank value, so wrterr and stay in the input loop
-			wrterr ('Function key label cannot be blank');
+		ELSE
+			res := ValidFileName (lbl, 'Function key label');
+			if res = -1 then
+				wrtmsg ('');
+				return;
+			elsif res = 0 then
+				b:= true;
+			end;
 		END;
-	UNTIL strlen(lbl) > 0;
+	UNTIL b;
 	
 	!set a default value for description
 	strassign (desc, lbl);
@@ -406,10 +414,10 @@ END SaveSunPos;
 
 PROCEDURE GetSunPos;
 VAR
-	filter		: string(16);
-	result, key	: integer;	
+	filter		: string(24); 
+	result, key	: integer;
 	saved		: array [6..19, 1..2] of real;		! used to store saved azimuth and altitude related to each function key
-	savedlbl	: array [6..19] of string(16);
+	savedlbl	: array [6..19] of string(24);
 	
 	PROCEDURE ShowSaved;
 	VAR
@@ -517,29 +525,31 @@ BEGIN
 		wrtlvl ('Sun Position');
 		lblsinit;
 		wrtmsg ('Select Sun Position (Altitude, Azimuth)');
-		lblset (1, 'Azimuth');
+		lblset (1, 'Enter Position');
 		cvangst (azimuth, str);
+		strins (str, ', Azimuth:', 1);
+		cvangst (altitude, tempstr);
+		strins (str, tempstr, 1);
+		strins (str, 'Altitude', 1);
 		if strlen (sunposmsg) > 0 then
 			strins (str, ' (', 1);
 			strins (str, sunposmsg, 1);
 			strcat (str, ')');
 		end;
 		lblmsg (1, str);	
-		lblset (2, 'Altitude');
-		cvangst (altitude, str);
-		if strlen (sunposmsg) > 0 then
-			strins (str, ' (', 1);
-			strins (str, sunposmsg, 1);
-			strcat (str, ')');
+		lblset (2, 'Save');
+		lblmsg (2, 'Save the current azimuth/altitude for future use in any drawing');
+		if strlen(filter) > 0 then
+			lblsett (5, filter, true);
+		else
+			lblsett (5, 'Filter', false);
 		end;
-		lblmsg (2, str);
-		lblset (3, 'Save');
-		lblmsg (3, 'Save the current azimuth/altitude for future use in any drawing');
-		lblsett (5, 'Filter', strlen(filter)>0);
 		if strlen(filter)= 0 then
 			lblmsg (5, 'Set a filter for display of saved sun positions on function keys');
 		else
-			lblmsg (5, filter);
+			tempstr := 'Filter in use: ';
+			strcat (tempstr, filter);
+			lblmsg (5, tempstr);
 		end;
 		
 		ShowSaved;	!positions 6 thru 19 for saved settings
@@ -548,18 +558,21 @@ BEGIN
 		
 		getesc (key);
 		IF key = f1 THEN
+			GetAltitude;
 			GetAzimuth;
 		ELSIF key = f2 THEN
-			GetAltitude;
-		ELSIF key = f3 THEN
 			SaveSunPos;
+!		ELSIF key =F3 THEN
+!			ExecAndWait ('SunPos.exe', 1, res);
 		ELSIF key = f5 THEN
 			if strlen(filter) > 0 then
 				filter := '';				! note: need to toggle filter to enable it to be removed - getstr & dgetstr do not appear to allow you to update a string to a blank value ?!
 			else
 				wrtmsg ('Enter filter to apply to displayed saved settings: ');
 				lblsinit;
-				result := dgetstr (filter, 16, key);
+				lblset (20, 'Exit');
+				lblson;
+				result := dgetstr (filter, 24, key);
 				wrtmsg ('');
 			end;
 			if atr_sysfind ('ShadSvFilter', atr) then
@@ -739,8 +752,8 @@ VAR
 BEGIN
 	if isnil (ent.addr) then
 		return;
-	elsif surface and ent.enttype <> entply then
-		return;
+	elsif surface and ((ent.enttype <> entply) or zplane) then
+		return ;
 	elsif not surface then
 		if not ((ent.enttype = entply and doply) or
 						(ent.enttype = entlin and doLin) or
@@ -867,12 +880,14 @@ VAR
 	svsurface	: entity;
 	bl, tr	: point; 
 BEGIN
-	Refresh; 	! remove any existing higlighted surface
-	if not zplane then
-		HighlightEnt (surface, true, true);
-	end;
 	svsurface := surface;
+	wrtlvl ('Shadow Surface');
+	
 	REPEAT
+		Refresh; 	! remove any existing higlighted surface
+		if not zplane then
+			HighlightEnt (surface, true, true);
+		end;
 		lblsinit;
 		lblsett (1, 'Fixed Z', zplane);
 		tempstr := 'Cast shadows on an infinite horzontal plane';
@@ -883,62 +898,85 @@ BEGIN
 			strcat (tempstr, ')');
 		end;
 		lblmsg (1, tempstr);
-		lblsett (8, 'Top Only', toponly);
-		lblmsg (8, 'Cast shadows on upper surface only of non-vertical polygons');
+		lblsett (3, 'Polygon', not zplane);
+		lblmsg (3, 'Select a polygon to define shadow surface');
+		if not zplane then
+			lblsett (4, 'Top Only', toponly);
+			lblmsg (4, 'Cast shadows on upper surface only of non-vertical polygons');
+		end;
 		lblset (20, 'Exit');
-		lblson;
-		wrtmsg ('Select polygon to cast shadows onto (or choose \'Fixed Z\'');
-		res := getpoint (pt, key);
-		IF res = res_normal THEN
-			mode_init (mode);
-			IF lyrsearch THEN
-				mode_lyr (mode, lyr_on);
-			ELSE
-				mode_lyr (mode, lyr_curr);
-			END;
-			mode_enttype (mode, entply);
-			bres := ent_near (surface, pt.x, pt.y, mode, true);
-			IF bres THEN
-				Refresh;
+		lblson;	
+		getesc (key);
+		IF key = s0 THEN
+			surface := svsurface;
+			vertical := PlyIsVertical(surface);
+			IF ss and not zplane THEN
 				HighlightEnt (surface, true, true);
-				! store the address of the surface as an attribute in the drawing
-				if atr_sysfind ('ShadSurface', atr) then
-					atr.lgladdr := lgl_addr(surface.addr);
-					atr_update (atr);
-					ss := true;
-					zplane := false;
-				else
-					atr_init (atr, atr_addr);
-					atr.name := 'ShadSurface';
-					atr.lgladdr := lgl_addr(surface.addr);
-					atr_add2sys (atr);
-					ss := true;
-				end;
-				vertical := PlyIsVertical(surface);
-				return;
-			ELSE
-				msg_OK ('Selected point too far from a suitable polygon');
 			END;
-
-		ELSIF res = res_escape THEN
-			IF key = s0 THEN
-				surface := svsurface;
-				vertical := PlyIsVertical(surface);
-				IF ss THEN
-					HighlightEnt (surface, true, true);
-				END;
-				RETURN;
-			ELSIF key = f8 THEN
+			RETURN;
+		ELSIF key = f4 THEN
+			if not zplane then
 				toponly := not toponly;
-			ELSIF key = f1 THEN
-				zplane := true;
+			end;
+		ELSIF key = f1 THEN
+			zplane := true;
+			lblsinit;
+			lblson;
+			wrtmsg ('Enter height of z plane: ');
+			getdis (zheight);
+			SaveBln ('ShadZedPlane',zplane, true);
+			SaveRl ('ShadZedHight', zheight, true);
+		ELSIF key = f3 THEN
+			zplane := false;
+			REPEAT
+				HighlightEnt (surface, true, true);
 				lblsinit;
+				lblsett (4, 'Top Only', toponly);
+				lblmsg (4, 'Cast shadows on upper surface only of non-vertical polygons');
+				lblset (20, 'Exit');
 				lblson;
-				wrtmsg ('Enter height of z plane: ');
-				getdis (zheight);
-				SaveBln ('ShadZedPlane',zplane, true);
-				SaveRl ('ShadZedHight', zheight, true);
-			END;
+				wrtmsg ('Select polygon to cast shadows onto');
+				res := getpoint (pt, key);
+				IF res = res_normal THEN
+					mode_init (mode);
+					IF lyrsearch THEN
+						mode_lyr (mode, lyr_on);
+					ELSE
+						mode_lyr (mode, lyr_curr);
+					END;
+					mode_enttype (mode, entply);
+					bres := ent_near (surface, pt.x, pt.y, mode, true);
+					IF bres THEN
+						Refresh;
+						HighlightEnt (surface, true, true);
+						! store the address of the surface as an attribute in the drawing
+						if atr_sysfind ('ShadSurface', atr) then
+							atr.lgladdr := lgl_addr(surface.addr);
+							atr_update (atr);
+							ss := true;
+						else
+							atr_init (atr, atr_addr);
+							atr.name := 'ShadSurface';
+							atr.lgladdr := lgl_addr(surface.addr);
+							atr_add2sys (atr);
+							ss := true;
+						end;
+						vertical := PlyIsVertical(surface);
+					ELSE
+						msg_OK ('Selected point too far from a suitable polygon');
+					END;
+				ELSIF res = res_escape THEN
+					IF key = s0 THEN
+						surface := svsurface;
+						vertical := PlyIsVertical(surface);
+					ELSIF key = f4 THEN
+						toponly := not toponly;
+					END;
+				END;
+			UNTIL (res=res_normal and bres) or (res = res_escape and key=s0);
+			if isnil (surface.addr) then
+				zplane := true;
+			end;
 		END;
 	UNTIL false;
 END GetSurface;
@@ -1093,7 +1131,7 @@ PROCEDURE SetShadSymbolName (symname : IN OUT symstr);
 !!! displayed if it is identified in DataCAD.  Also include date/time of creation to ensure name of each shadow is
 !!! unique. Name will be in one of the following 2 formats (the first format is used if the sun position is named 
 !!! [i.e. if it has an associated sunposmsg], otherwise the second format is used):
-!!!     SHADOW sunposmsg_______  Created:yyyymmdd hh:mm:ss
+!!!     SHADOW sunposmsg_______________  Created:yyyymmdd hh:mm:ss
 !!!     SHADOW Az:359-59-59 Al:359-59-59  Created:yyyymmdd hh:mm:ss
 
 VAR
@@ -1991,7 +2029,7 @@ VAR
 	r	: real;
 	s : str80;
 BEGIN
-	namever :='Shadow v0.8.5   Copyright D Henderson 2017.';
+	namever :='Shadow v0.9.02   Copyright D Henderson 2017.';
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
 	showprogress := false; ! disabled as update of progress display was unreliable, even though processing was proceeding ok
@@ -2044,6 +2082,7 @@ BEGIN
 			zplane := true;
 			cvdisst (zheight, tempstr);
 			DisplayVerboseMsg (3, tempstr);
+			SaveBln ('ShadZedPlane',zplane, true);
 		end;
 	end;
 END Initialise;

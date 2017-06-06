@@ -1,5 +1,8 @@
 MODULE StrUtil;
 
+PROCEDURE msg_OK (msg : str255); BUILTIN 245;
+FUNCTION msg_dlg (msg : str255; msgDlgType, msgDlgButtons : integer) : integer; BUILTIN 246;
+
 FUNCTION BlankString (s : string): boolean;		PUBLIC;
 VAR
 	i	: integer;
@@ -16,7 +19,75 @@ BEGIN
 		end;
 		return true;
 
-END BlankString	;
+END BlankString;
+
+FUNCTION ValidFileName (s : string; strname : string) : integer; 		PUBLIC;
+!!! returns 0 if everything ok, otherwise returns 1 if user presses OK, -1 if user presses Cancel
+VAR
+	result	: boolean;
+	msg			: str255;
+	invalids: str255;
+BEGIN
+	result := true;
+	invalids := '';
+	msg := '';
+	if strlen(s) = 0 then
+		result := false;
+		strassign (msg, strname);
+		strcat (msg, ' may not be blank.\r');
+	else
+		if strpos (' ', s, 1) = 1 then
+			result := false;
+			strassign (msg, strname);
+			strcat (msg, ' may not start with a space.\r\r');
+		end;
+		if strpos ('|', s, 1) > 0 then
+			strcat (invalids, 'pipe (|), ');
+		end;
+		if strpos ('\\', s, 1) > 0 then
+			strcat (invalids, 'backslash (\\), ');
+		end;
+		if strpos ('<', s, 1) > 0 then
+			strcat (invalids, 'angle bracket (<), ');
+		end;
+		if strpos ('>', s, 1) > 0 then
+			strcat (invalids, 'angle bracket (>), ');
+		end;
+		if strpos ('*', s, 1) > 0 then
+			strcat (invalids, 'asterisk (*), ');
+		end;
+		if strpos ('?', s, 1) > 0 then
+			strcat (invalids, 'question mark (?), ');
+		end;
+		if strpos ('/', s, 1) > 0 then
+			strcat (invalids, 'slash (/), ');
+		end;
+		if strpos (':', s, 1) > 0 then
+			strcat (invalids, 'colon (:), ');
+		end;
+		if strpos ('"', s, 1) > 0 then
+			strcat (invalids, 'quote ("), ');
+		end;
+		if strlen(invalids) > 0 then
+			result := false;
+			strdel (invalids, strlen(invalids)-1, 2);
+			strcat (msg, strname);
+			strcat (msg, ' may not contain the following characters:\r');
+			strcat (msg, invalids);
+		end;
+	end;
+	
+	if not result then
+		if msg_dlg (msg, 2, 2) = 4 then
+			return 1;
+		else
+			return -1;
+		end;
+	end;
+
+	return 0;
+
+END ValidFileName;
 
 
 END StrUtil.
