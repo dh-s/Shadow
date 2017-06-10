@@ -55,12 +55,10 @@ PROGRAM Shadow;
 
 CONST
    ssNum  = 11;
+   entplyvd = 28;
 
 VAR
-!	DCVer		: real;		! 190001.0 for Dcad 19
-!	DCVer1	: integer;
-!	DCVer2	: integer;
-!	DCVers	: string(12);
+	DCVer		: real;		! 190001.0 for Dcad 19
 	NewDataCAD : boolean;
 	namever		: string(100);
 	mat, invmat		: modmat;
@@ -116,12 +114,12 @@ PROCEDURE execAndWait ( prog : str255; Visibility: integer; returnCode : OUT int
 FUNCTION DCAD_Version : real ; BUILTIN 669;
 PROCEDURE PlinCovered(Plin : In Out entity; covered : boolean); BUILTIN 674;
 PROCEDURE PlinVoidAdd(Parent, Void : In Out entity); BUILTIN 673;
-
+{
 PROCEDURE Refresh;
 BEGIN
 	globalesc(27);	! equivalent to pressing the Esc key
 END Refresh;
-
+}
 FUNCTION RealEqual (r1, r2 : real; delta : real) : boolean;
 BEGIN
 	IF absr(r1-r2) <= delta THEN
@@ -427,6 +425,9 @@ VAR
 	result, key	: integer;
 	saved		: array [6..19, 1..2] of real;		! used to store saved azimuth and altitude related to each function key
 	savedlbl	: array [6..19] of string(24);
+	b : boolean;
+	r : real;
+
 	
 	PROCEDURE ShowSaved;
 	VAR
@@ -445,7 +446,7 @@ VAR
 		for key := 6 to 19 do
 			savedlbl[key] := '';
 		end;
-	
+
 		! set the path variable up as a wildcard definition for the filtered sun files
 		getpath (path, pathmcr);
 		strcat (path, 'Shad\\');
@@ -511,21 +512,27 @@ VAR
 		END;
 	END ShowSaved;
 	
-	PROCEDURE GetSaved (ndx : integer);
+	FUNCTION GetSaved (ndx : integer) : boolean;
 	BEGIN
+		if strlen (savedlbl[ndx]) = 0 then
+			Beep;
+			return false;
+		end;
 		azimuth := Saved[ndx, 1];
 		altitude := Saved[ndx, 2];
 		strassign (sunposmsg, savedlbl[ndx]);  
 		SaveAng ('ShadAltitude', altitude, false);
 		SaveAng ('Shad_Azimuth', azimuth, false);
 		SaveStr ('ShadSunPosMg', sunposmsg, false);
+		return true;
 	END GetSaved;
 	
 BEGIN
+	wrterr('');
 	REPEAT
 		! initialize saved settings filter
 		GetSvdStr ('ShadSvFilter', '', filter);
-		
+		b := false;
 		wrtlvl ('Sun Position');
 		lblsinit;
 		wrtmsg ('Select Sun Position (Altitude, Azimuth)');
@@ -570,6 +577,7 @@ BEGIN
 			SaveSunPos;
 		ELSIF key =F3 THEN
 			SaveIniStr ('Filter', '');
+			SaveIniRl ('ShadAltitude', 0.0);
 			ExecAndWait ('SunPos.exe', 1, res);
 			if res = 0 then
 				GetIniStr ( 'ShadSunPosMg', '', sunposmsg);
@@ -578,11 +586,18 @@ BEGIN
 					strassign (filter, s80);
 					SaveStr ('ShadSvFilter', filter, false);
 				end;
-				azimuth := GetIniRl ('Shad_Azimuth', azimuth);
-				altitude :=GetIniRl ('ShadAltitude', altitude);
-				SaveStr ('ShadSunPosMg', sunposmsg, false);
-				SaveAng ('Shad_Azimuth', azimuth, false);
-				SaveAng ('ShadAltitude', altitude, false);
+				r :=GetIniRl ('ShadAltitude', altitude);
+				if r <> 0.0 then
+					altitude := r;
+					azimuth := GetIniRl ('Shad_Azimuth', azimuth);
+					SaveStr ('ShadSunPosMg', sunposmsg, false);
+					SaveAng ('Shad_Azimuth', azimuth, false);
+					SaveAng ('ShadAltitude', altitude, false);
+					strassign (tempstr, sunposmsg);
+					strcat (tempstr, ' set as sun position');
+					wrterr (tempstr);
+					return;
+				end;
 			end;
 
 		ELSIF key = f5 THEN
@@ -599,16 +614,19 @@ BEGIN
 			SaveStr ('ShadSvFilter', filter, false);
 			
 		ELSIF (key>=f6) and (key <= f0) THEN	! one of the saved values between F6 & F0 has been selected
-		GetSaved (key - f6 + 6);	! it is possible that the values of the function key constants may
-										! change in future versions, but it is probably reasonably safe to 
-										! assume that f1..f0 will still be in a contiguous range of numbers ...
+			b := GetSaved (key - f6 + 6);
 		ELSIF (key>=s1) and (key <= s9) THEN	! one of the saved values between S1 & S9 has been selected
-			GetSaved (key - s1 + 11);	! it is possible that the values of the function key constants may
-										! change in future versions, but it is probably reasonably safe to 
-										! assume that s1..s0 will still be in a contiguous range of numbers ...
+			b := GetSaved (key - s1 + 11);
 		ELSIF key = s0 THEN
 			return;
 		END;
+		
+		if b then
+			strassign (tempstr, sunposmsg);
+			strcat (tempstr, ' set as Sun Position');
+			wrterr (tempstr);
+			return;
+		end;
 	UNTIL false;
 END GetSunPos;
 	
@@ -897,7 +915,7 @@ BEGIN
 	wrtlvl ('Shadow Surface');
 	
 	REPEAT
-		Refresh; 	! remove any existing higlighted surface
+		ReDraw; 	! remove any existing higlighted surface
 		if not zplane then
 			HighlightEnt (surface, true, true);
 		end;
@@ -961,7 +979,7 @@ BEGIN
 					bres := ent_near (surface, pt.x, pt.y, mode, true);
 					IF bres THEN
 						zplane := false;
-						Refresh;
+						ReDraw;
 						HighlightEnt (surface, true, true);
 						! store the address of the surface as an attribute in the drawing
 						if atr_sysfind ('ShadSurface', atr) then
@@ -1022,7 +1040,7 @@ BEGIN
 			if entityss >= 0 and not strcomp (s, tempstr, -1) then
 				lblsinit;
 				lblson;
-				refresh;
+				reDraw;
 				HighlightSS (entityss, true, false);
 			end;
 			return;
@@ -1038,7 +1056,7 @@ VAR
 	addr		: entaddr;
 	ent			: entity;
 BEGIN
-	Refresh;
+	ReDraw;
 	lblsinit;
 	lblson;
 	HighlightSS (entityss, true, false);
@@ -1096,7 +1114,7 @@ BEGIN
 			end;
 			SaveInt ('ShadEntSlSet', entityss, false);
 		elsif (key = s4) and (entityss >= 0) then
-			Refresh;
+			reDraw;
 			ssClear (entityss);
 		elsif (key = s5) and (entityss >= 0) then
 			lblsinit;
@@ -1270,7 +1288,6 @@ BEGIN
 	if npnt < 3 then
 		return;
 	end;
-!msg_ok ('CreateShadPln');  
 	! create a polyline entity with these points
 	ent_init (shad, entPln);
 	shad.plnbase := 0.0;
@@ -1279,10 +1296,10 @@ BEGIN
 	if colour >= 0 or colour < -1000 then
 		shad.color := entclr;
 	end;
-	ent_add (shad);
 	if NewDataCAD and (not isvoid) then
 		PlinCovered(shad, true);
 	end;
+	ent_add (shad);
 	for i := 1 to npnt do
 		polyvert_init (shadpv);
 		shadpv.shape := pv_vert;
@@ -1304,15 +1321,17 @@ BEGIN
 				if ent.enttype = entpln then
 					if PntInPln (pnts[1], ent) = 1 then 
 						PlinVoidAdd(ent, shad);
+						ent_draw_dl (ent, drmode_black, true);
+						ent_draw_dl (shad, drmode_black, true);
 					end;
 					adr := ent_next (ent, mode);
 				end;
 			END;
-		else
+		elsif not isvoid then
 			SolidFill (shad, shad.color);
 		end;
 	end;
-	if not isvoid then
+	if (not isvoid) or (hatchlines <> 5) then
 		ssAdd (ssNum, shad);
 	end;
 
@@ -1593,6 +1612,7 @@ VAR
 	sl        : scanLineType;
 	tempent		: entity;
 	entnum		: integer;
+	VoidsDone	: boolean;
 
 	FUNCTION Cast (castent : IN entity; shad : IN OUT entity; isvoid : boolean) : boolean;
 	!!! calculates shadow for ent and returns the shadow in shad. 
@@ -1622,7 +1642,8 @@ VAR
 		
 		!set up points as being the points of castent with the modelling matrix applied
 		below := false;
-		if castent.enttype = entply then
+
+		if castent.enttype = entply or castent.enttype = entplyvd then
 			npoints := castent.plyNpnt;
 			abovepnt := 0;
 			for i := 1 to npoints do
@@ -1764,12 +1785,11 @@ BEGIN
 		return;
 	end;
 	if RealEqual (mod_altitude, 0.0, 0.001) or RealEqual (mod_altitude, pi, 0.001) then
-		msg_OK ('Sun rays are parallel to surface');
-		msg_OK ('Cannot cast shadows');
+		msg_OK ('Cannot cast Shadows\r(Suns rays are parallel to surface)');
 		return;
 	end;
 	tan_altitude := tan (mod_altitude);
-	
+
 	svlyr := getlyrcurr;
 	if strlen(lyrname) > 0 then
 		lyr_set (lyr);
@@ -1782,9 +1802,9 @@ BEGIN
 	shadowcreated := 0;
 	mode_init (entmode);
 	mode_ss (entmode, entityss);
-	ssClear (ssNum);
 	addr := ent_first (entmode);
 	entnum := 0;
+	VoidsDone := false;
 	WHILE ent_get (ent, addr) and shadowcreated < 32750 DO
 		IF (ent.addr <> surface.addr) and 
 			 (((ent.enttype = entply) and doPly) or 
@@ -1804,26 +1824,25 @@ BEGIN
 				entclr := ent.color;
 			end;
 
-			if hatchlines = 5 then	!solid fill
-				ssClear (ssNum);
-			end;
+			ssClear (ssNum);
 			IF Cast (ent, shadow, false) THEN
 				shadowcreated := shadowcreated+1;
 				if ent.enttype = entply and (NewDataCAD or hatchlines<>5)  then
 					! process any voids
 					v_addr := ent.plyfrstvoid;
 					WHILE void_get (v_ent, v_addr) DO
-msg_ok ('Processing Void');
-						b := Cast (v_ent, v_shad, false);
+						VoidsDone := true;
+						b := Cast (v_ent, v_shad, true);
 						v_addr := v_ent.next;
 					END;
 				end;
 			END;
-{
-			if hatchlines > 0 and hatchlines < 5 then
-				! Add Hatch
+
+			! Add Hatch
+			if hatchlines > 0 and hatchlines < 4 then
 				mode_init (mode);
 				mode_ss (mode, ssNum);
+				mode_enttype (mode, entpln);
 				for i := 1 to hatchlines do
 					sl.ang := hatchang + float(i-1) * pi / float(hatchlines);
 					setpoint (sl.origin, 0.0);
@@ -1834,7 +1853,6 @@ msg_ok ('Processing Void');
 					hatch_mode (mode, sl, 0.0, 0.0, origin, 0.0, 1.0, htype_normal, lyr, hmin, hmax, false, j, false);
 				end;
 			end;
-}
 			ssClear (ssNum);
 
 		END;
@@ -1844,24 +1862,6 @@ msg_ok ('Processing Void');
 	if shadowcreated > 0 then
 		! update hatch entities
 		if hatchlines > 0 and hatchlines < 5 then
-
-			
-			! Add Hatch
-			mode_init (mode);
-			mode_group (mode, shadow);
-			mode_enttype (mode, entpln);
-			for i := 1 to hatchlines do
-				sl.ang := hatchang + float(i-1) * pi / float(hatchlines);
-				setpoint (sl.origin, 0.0);
-				sl.delta.x := 0.0;
-				sl.delta.y := hatchspace;
-				sl.numdash := 0;
-				j := 0;
-				hatch_mode (mode, sl, 0.0, 0.0, origin, 0.0, 1.0, htype_ignore, lyr, hmin, hmax, false, j, false);
-			end;
-
-
-
 			mode_init (mode);
 			mode_group (mode, shadow);
 			mode_enttype (mode, entlin);
@@ -1913,6 +1913,9 @@ msg_ok ('Processing Void');
 		msg_OK ('No shadows cast on this surface by entity(s)');
 	end;
 	lyr_set (svlyr);
+	if NewDataCAD and VoidsDone then
+		regen;		! the new polyline void builtin procedure can leave underiable artifacts on the screen
+	end;
 
 END GenShadows;
 
@@ -2099,7 +2102,7 @@ VAR
 	r	: real;
 	s : str80;
 BEGIN
-	namever :='Shadow v0.9.04   Copyright D Henderson 2017.';
+	namever :='Shadow v0.9.05   Copyright D Henderson 2017.';
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
 	showprogress := false; ! disabled as update of progress display was unreliable, even though processing was proceeding ok
@@ -2155,33 +2158,24 @@ BEGIN
 			SaveBln ('ShadZedPlane',zplane, true);
 		end;
 	end;
-{
-	DCVer1 := GetIniInt ('DC_MajorVer', 0);
-	DCVer2 := GetIniInt ('DC_MinorVer', 0);
-	if DCVer1 >= 19 then
-		DCVer := DCAD_Version;
-		DCVer1 := trunc (DCVer/100000.0);
-		DCVer2 := trunc (DCVer - float(DCVer1)*10000.0);
-		SaveIniInt ('DC_MajorVer', DCVer1);
-		SaveIniInt ('DC_MinorVer', DCVer2);
-	elsif DCVer1 = 0 then
+
+	NewDataCAD := false;
+	DCVer := GetIniRl ('DCAD_Version', 0.0	);
+	if DCVer = 0.0 then
 		TempStr := 'Are you using DataCAD version 19 or greater ?\r';
 		res := msg_dlg (TempStr, 4, 1);
 		if res = 1 then
 			DCVer := DCAD_Version;
-			DCVer1 := trunc (DCVer/100000.0);
-			DCVer2 := trunc (DCVer - float(DCVer1)*10000.0);
-			SaveIniInt ('DC_MajorVer', DCVer1);
-			SaveIniInt ('DC_MinorVer', DCVer2);
+			SaveIniRl ('DCAD_Version', DCVer);
 			tempstr := 'Thank you. The appropriate configuration as been\r';
 			strcat (tempstr, 'saved, and you will not be asked again');
 			msg_OK (tempstr);
 		elsif res = 2 then
-			DCVer1 := 18;
-			SaveIniInt ('DC_MajorVer', DCVer1);
+			DCVer := 189999.1;
+			SaveIniRl ('DCAD_Version', DCVer);
 			tempstr :=       'Thank you. The appropriate configuration as been\r';
 			strcat (tempstr, 'saved, and you will not be asked again.\r\r');
-			strcat (tempstr, 'Refer to the instruction document for you to change\r');
+			strcat (tempstr, 'Refer to the instruction document on how to change\r');
 			strcat (tempstr, 'this setting if you upgrade to DataCAD 19 or\r');
 			strcat (tempstr, 'greater in the future');
 			msg_OK (tempstr);
@@ -2191,9 +2185,13 @@ BEGIN
 			strcat (tempstr, 'YES or NO');
 			msg_OK (tempstr);
 		end;
+	elsif DCVer >= 190001.0 then
+		DCVer := DCAD_Version;
+		SaveIniRl ('DCAD_Version', DCVer);
+		if DCVer >= 190100.14 then
+			NewDataCAD := true;
+		end;
 	end;
-}
-	NewDataCAD := false;
 END Initialise;
 
 BEGIN
@@ -2373,6 +2371,6 @@ BEGIN
 
 	UNTIL done;
 	
-	Refresh;		! get rid of any higlights that are hanging around
+	Redraw;		! get rid of any higlights that are hanging around
 END Shadow.
 
