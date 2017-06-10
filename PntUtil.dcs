@@ -1,6 +1,8 @@
 MODULE PointUtil;
 
 # INCLUDE '..\\..\\Inc\\_misc.inc'
+# INCLUDE '..\\..\\Inc\\_pline.inc'
+
 
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
 
@@ -208,6 +210,30 @@ end;
 		return 1;
 	end;
 END PntInPly;
+
+FUNCTION PntInPln (p : point; pln : entity) : integer;		PUBLIC;
+! note : this function assumes pln is closed and that every edge is a straight line ....
+var
+	pv	: polyvert;
+	pva	: pvtaddr;
+	pnts: array [1..250] of point;
+	cnt	: integer;	
+BEGIN
+	if pln.enttype <> entpln then
+		return -1;
+	end;
+	if polyvert_count (pln.plnfrst) > 250 then
+		return -1;
+	end;
+	cnt := 0;
+	pva := pln.plnfrst;
+	while polyvert_get (pv, pva, pln.plnfrst, pln.plnlast) do
+		pva := pv.next;
+		cnt := cnt + 1;
+		pnts[cnt] := pv.pnt;
+	end;
+	return PntInPly (p, pnts, cnt);
+END PntInPln;
 
 PROCEDURE SwapPnts (p1, p2 : IN OUT point);			PUBLIC;
 VAR

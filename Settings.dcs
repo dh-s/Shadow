@@ -23,6 +23,12 @@ BEGIN
 		initialised := true;
 END InitSettings;
 
+PROCEDURE SaveIniInt (name : string;  value : integer);  PUBLIC;
+BEGIN
+		strassign (ident, name);
+		writeIniInt (iniFileName, section, ident, value);
+END SaveIniInt;
+
 PROCEDURE SaveInt (name : string;  value : integer; toini : boolean);		PUBLIC;
 BEGIN
 	if atr_sysfind (name, atr) then
@@ -35,25 +41,27 @@ BEGIN
 		atr_add2sys (atr);
 	end;
 	if toini then
-		strassign (ident, name);
-		writeIniInt (iniFileName, section, ident, value);
+		SaveIniInt(name, value);
 	end;
 END SaveInt;
 
-FUNCTION GetSvdInt (name : string; default : integer) : integer;		PUBLIC;
+FUNCTION GetIniInt (name : string; default : integer) : integer;		PUBLIC;
 VAR
 	i : integer;
+BEGIN
+		strassign (ident, name);
+		readIniInt (iniFileName, section, ident, default, i);
+		return i;
+END GetIniInt;
+
+FUNCTION GetSvdInt (name : string; default : integer) : integer;		PUBLIC;
 BEGIN
 	if atr_sysfind (name, atr) then
 		return atr.int;
 	else
-		strassign (ident, name);
-		readIniInt (iniFileName, section, ident, default, i);
-		return i;
+		return GetIniInt (name, default);
 	end;
 END GetSvdInt;
-
-
 
 PROCEDURE SaveAng (name : string;  value : real; toini : boolean);		PUBLIC;
 BEGIN
@@ -72,6 +80,16 @@ BEGIN
 	end;
 END SaveAng;
 
+FUNCTION GetIniRl (name : string; default : real) : real;		PUBLIC;
+VAR
+	r : real;
+BEGIN
+	strassign (ident, name);
+	readIniReal (iniFileName, section, ident, default, r);
+	return r;
+END GetIniRl;
+
+
 FUNCTION GetSvdAng (name : string; default : real) : real;		PUBLIC;
 VAR
 	r : real;
@@ -79,13 +97,15 @@ BEGIN
 	if atr_sysfind (name, atr) then
 		return atr.ang;
 	else
-		strassign (ident, name);
-		readIniReal (iniFileName, section, ident, default, r);
-		return r;
+		return GetIniRl (name, default);
 	end;
 END GetSvdAng;
 
-
+PROCEDURE SaveIniRl (name : string; value : real);	PUBLIC;
+BEGIN
+		strassign (ident, name);
+		writeIniReal (iniFileName, section, ident, value);
+END SaveIniRl;
 
 
 PROCEDURE SaveRl (name : string;  value : real; toini : boolean);		PUBLIC;
@@ -100,8 +120,7 @@ BEGIN
 		atr_add2sys (atr);
 	end;
 	if toini then
-		strassign (ident, name);
-		writeIniReal (iniFileName, section, ident, value);
+		SaveIniRl (name, value);
 	end;
 END SaveRl;
 
@@ -112,11 +131,9 @@ BEGIN
 	if atr_sysfind (name, atr) then
 		return atr.rl;
 	else
-		strassign (ident, name);
-		readIniReal (iniFileName, section, ident, default, r);
-		return r;
+		return GetIniRl (name, default);
 	end;
-END GetSvdRl;
+End GetSvdRl;
 
 
 
@@ -176,10 +193,17 @@ BEGIN
 	end;
 END GetSvdBln;
 
-
-PROCEDURE SaveStr (name : string;  value : string; toini : boolean);		PUBLIC;
+PROCEDURE SaveIniStr (name : string;  value : string);		PUBLIC;
 VAR
 	s : str255;
+BEGIN
+	strassign (s, value);
+	strassign (ident, name);
+	writeIniStr (iniFileName, section, ident, s);
+END SaveIniStr;
+
+
+PROCEDURE SaveStr (name : string;  value : string; toini : boolean);		PUBLIC;
 BEGIN
 	if atr_sysfind (name, atr) then
 		atr.str := value;
@@ -191,11 +215,22 @@ BEGIN
 		atr_add2sys (atr);
 	end;
 	if toini then
-		strassign (s, value);
-		strassign (ident, name);
-		writeIniStr (iniFileName, section, ident, s);
+		SaveIniStr (name, value);
 	end;
 END SaveStr;
+
+PROCEDURE GetIniStr (name : string; default : string; result : OUT str80);		PUBLIC;
+VAR
+	res : str255;
+	def	: str255;
+	res80 : str80;
+BEGIN
+	strassign (ident, name);
+	strassign (def, default);
+	readIniStr (iniFileName, section, ident, def, res);
+	strassign (res80, res);
+	result := res80;
+END GetIniStr;
 
 PROCEDURE GetSvdStr (name : string; default : string; result : OUT str80 );		PUBLIC;
 VAR
@@ -204,16 +239,15 @@ VAR
 	res80 : str80;
 BEGIN
 	if atr_sysfind (name, atr) then
-!		strassign (res, atr.str);
 		result := atr.str;
 	else
-		strassign (ident, name);
-		strassign (def, default);
-		readIniStr (iniFileName, section, ident, def, res);
-		strassign (res80, res);
+		GetIniStr (name, default, res80);
 		result := res80;
 	end;
 END GetSvdStr;
+
+
+
 
 
 
