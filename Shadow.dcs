@@ -1650,15 +1650,23 @@ VAR
 				xformpt (castent.plyPnt[i], mat, points[i]);
 			end;
 		elsif castent.enttype = entlin then
-			npoints := 4;
-			xformpt (castent.linpt1, mat, points[1]);
-			points[2] := castent.linpt1;
-			points[2].z := castent.linpt2.z;
-			xformpt (points[2], mat, points[2]);
-			xformpt (castent.linpt2, mat, points[3]);
-			points[4] := castent.linpt2;
-			points[4].z := castent.linpt1.z;
-			xformpt (points[4], mat, points[4]);
+			if realequal (castent.linpt1.z, castent.linpt2.z, ABSZero) then
+			! treat line as a 3D line
+			npoints := 2;
+				xformpt (castent.linpt1, mat, points[1]);
+				xformpt (castent.linpt2, mat, points[2]);
+			else
+				! treat line as a vertical polygon
+				npoints := 4;
+				xformpt (castent.linpt1, mat, points[1]);
+				points[2] := castent.linpt1;
+				points[2].z := castent.linpt2.z;
+				xformpt (points[2], mat, points[2]);
+				xformpt (castent.linpt2, mat, points[3]);
+				points[4] := castent.linpt2;
+				points[4].z := castent.linpt1.z;
+				xformpt (points[4], mat, points[4]);
+			end;
 		elsif castent.enttype = entln3 then
 			npoints := 2;
 			xformpt (castent.ln3Pt1, mat, points[1]);
@@ -1738,7 +1746,7 @@ VAR
 
 		! create polyline entity(s) with these points
 		if trim and (not zplane) then
-			if castent.enttype = entln3 then
+			if (castent.enttype = entln3) or (castent.enttype = entlin and npoints=2) then
 				if CreateTrimmedLn3 (points[1], points[2], surfacepnts, surface.plynpnt, shad) = -1 then
 					return false;
 				end;
@@ -1747,7 +1755,7 @@ VAR
 					return false;
 				end;
 			end;
-		elsif castent.enttype = entln3 then
+		elsif (castent.enttype = entln3) or (castent.enttype = entlin and npoints=2) then
 			return CreateShadLn3 (points[1], points[2], shad);
 		else
 			CreateShadPln (points, npoints, shad, isvoid);
