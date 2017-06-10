@@ -2110,7 +2110,7 @@ VAR
 	r	: real;
 	s : str80;
 BEGIN
-	namever :='Shadow v0.9.05   Copyright D Henderson 2017.';
+	namever :='Shadow v0.9.06   Copyright D Henderson 2017.';
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
 	showprogress := false; ! disabled as update of progress display was unreliable, even though processing was proceeding ok
