@@ -2164,6 +2164,7 @@ BEGIN
 			cvdisst (zheight, tempstr);
 			if StartsWith (tempstr, '.', false) then
 				strins (tempstr, '0', 1);
+			end;
 			DisplayVerboseMsg (3, tempstr);
 			SaveBln ('ShadZedPlane',zplane, true);
 		end;
