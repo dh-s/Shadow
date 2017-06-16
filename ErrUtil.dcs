@@ -54,10 +54,10 @@ BEGIN
 		strcat (msg, 'Go to Shadow Entities menu (F5) and then select Ent\r');
 		strcat (msg, 'Types (S8) to specify types of entities to cast shadows.\r');
 	elsif msgnum = 3 then
-		msg := 'CANNOT FIND SURFACE POLYGON\r\r';
-		strcat (msg, 'Looks like you previously selected a polygon as\r');
-		strcat (msg, 'shadow surface in this drawing, but the polygon\r');
-		strcat (msg, 'cannot be found (maybe you\'ve deleted it?)\r\r');
+		msg := ''; !'CANNOT FIND SURFACE POLYGON\r\r';
+!		strcat (msg, 'Looks like you previously selected a polygon as\r');
+!		strcat (msg, 'shadow surface in this drawing, but the polygon\r');
+!		strcat (msg, 'cannot be found (maybe you\'ve deleted it?)\r\r');
 		strcat (msg, 'Setting surface to a horizontal plane at ');
 		strcat (msg, param);
 		strcat (msg, '.\r');

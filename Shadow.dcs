@@ -52,6 +52,7 @@ PROGRAM Shadow;
 # INCLUDE 'StrUtil.inc'
 # INCLUDE 'SolidFll.inc'
 # INCLUDE 'Arrows.inc'
+# INCLUDE 'LyrUtil.inc'
 
 CONST
    ssNum  = 11;
@@ -59,7 +60,7 @@ CONST
 
 VAR
 	DCVer		: real;		! 190001.0 for Dcad 19
-	NewDataCAD : boolean;
+	DC191, DC190 : boolean;
 	namever		: string(100);
 	mat, invmat		: modmat;
 	north		: real;
@@ -88,7 +89,7 @@ VAR
 	colour		: integer;
 	entclr		: integer;
 	trim			: boolean;
-	lyrname		: str8;
+	lyrname		: str80;
 	lyr				: layer;
 	svlyr			: layer;
 	hatchlines: integer;		!0 = No Hatch,  1 = parralel lines,  2 =CrossHatch,  5 = solid fill
@@ -114,12 +115,7 @@ PROCEDURE execAndWait ( prog : str255; Visibility: integer; returnCode : OUT int
 FUNCTION DCAD_Version : real ; BUILTIN 669;
 PROCEDURE PlinCovered(Plin : In Out entity; covered : boolean); BUILTIN 674;
 PROCEDURE PlinVoidAdd(Parent, Void : In Out entity); BUILTIN 673;
-{
-PROCEDURE Refresh;
-BEGIN
-	globalesc(27);	! equivalent to pressing the Esc key
-END Refresh;
-}
+
 FUNCTION RealEqual (r1, r2 : real; delta : real) : boolean;
 BEGIN
 	IF absr(r1-r2) <= delta THEN
@@ -1296,7 +1292,7 @@ BEGIN
 	if colour >= 0 or colour < -1000 then
 		shad.color := entclr;
 	end;
-	if NewDataCAD and (not isvoid) then
+	if DC191 and (not isvoid) then
 		PlinCovered(shad, true);
 	end;
 	ent_add (shad);
@@ -1312,7 +1308,7 @@ BEGIN
 	end;
 	
 	if hatchlines = 5 then
-		if isvoid and NewDataCAD then
+		if isvoid and DC191 then
 			! find the entity that the void will effect
 			mode_init (mode);
 			mode_ss (mode, ssNum);
@@ -1835,7 +1831,7 @@ BEGIN
 			ssClear (ssNum);
 			IF Cast (ent, shadow, false) THEN
 				shadowcreated := shadowcreated+1;
-				if ent.enttype = entply and (NewDataCAD or hatchlines<>5)  then
+				if ent.enttype = entply and (DC191 or hatchlines<>5)  then
 					! process any voids
 					v_addr := ent.plyfrstvoid;
 					WHILE void_get (v_ent, v_addr) DO
@@ -1921,7 +1917,7 @@ BEGIN
 		msg_OK ('No shadows cast on this surface by entity(s)');
 	end;
 	lyr_set (svlyr);
-	if NewDataCAD and VoidsDone then
+	if DC191 and VoidsDone then
 		regen;		! the new polyline void builtin procedure can leave underiable artifacts on the screen
 	end;
 
@@ -2019,13 +2015,17 @@ BEGIN
 	lblsinit;
 	lblson;
 	wrtmsg ('Enter layer to create shadows on: ');
-	getstr (lyrname, 8);
+	if DC190 then
+		getstr (lyrname, 80);
+	else
+		getstr (lyrname, 8);
+	end;
 	if blankstring(lyrname) then
 		lyrname := '';
 		return;
 	end;
 	if not lyr_find (lyrname, lyr) then
-		if not lyr_create (lyrname, lyr) then
+		if not Lyr_Create19 (lyrname, lyr, DC190) then
 			msg_OK ('Unable to find or create layer');
 			lyrname := '';
 		end;
@@ -2110,7 +2110,7 @@ VAR
 	r	: real;
 	s : str80;
 BEGIN
-	namever :='Shadow v0.9.06   Copyright D Henderson 2017.';
+	namever :='Shadow v0.9.07   Copyright D Henderson 2017.';
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
 	showprogress := false; ! disabled as update of progress display was unreliable, even though processing was proceeding ok
@@ -2162,12 +2162,15 @@ BEGIN
 		if not zplane then 
 			zplane := true;
 			cvdisst (zheight, tempstr);
+			if StartsWith (tempstr, '.', false) then
+				strins (tempstr, '0', 1);
 			DisplayVerboseMsg (3, tempstr);
 			SaveBln ('ShadZedPlane',zplane, true);
 		end;
 	end;
 
-	NewDataCAD := false;
+	DC190 := false;
+	DC191 := false;
 	DCVer := GetIniRl ('DCAD_Version', 0.0	);
 	if DCVer = 0.0 then
 		TempStr := 'Are you using DataCAD version 19 or greater ?\r';
@@ -2178,8 +2181,12 @@ BEGIN
 			tempstr := 'Thank you. The appropriate configuration as been\r';
 			strcat (tempstr, 'saved, and you will not be asked again');
 			msg_OK (tempstr);
+			DC190 := true;
+			if DCVer >= 31683.3583333 * 6.0 then
+				DC191 := true;
+			end;
 		elsif res = 2 then
-			DCVer := 189999.1;
+			DCVer := 18.0;
 			SaveIniRl ('DCAD_Version', DCVer);
 			tempstr :=       'Thank you. The appropriate configuration as been\r';
 			strcat (tempstr, 'saved, and you will not be asked again.\r\r');
@@ -2193,11 +2200,12 @@ BEGIN
 			strcat (tempstr, 'YES or NO');
 			msg_OK (tempstr);
 		end;
-	elsif DCVer >= 190001.0 then
+	elsif DCVer >= 31666.8333333 * 6.0 then
 		DCVer := DCAD_Version;
+		DC190 := true;
 		SaveIniRl ('DCAD_Version', DCVer);
-		if DCVer >= 190100.14 then
-			NewDataCAD := true;
+		if DCVer >= 31683.3583333 * 6.0 then
+			DC191 := true;
 		end;
 	end;
 END Initialise;
