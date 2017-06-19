@@ -1,0 +1,95 @@
+MODULE SunEye;
+
+# INCLUDE 'StrUtil.inc'
+# INCLUDE 'SolidFll.inc'
+# INCLUDE 'ErrUtil.inc'
+# INCLUDE 'PntUtil.inc'
+# INCLUDE '..\\..\\Inc\\_pline.inc'
+# INCLUDE '..\\..\\Inc\\_misc.inc'
+# INCLUDE '..\\..\\Inc\\_hatch.inc'
+
+PROCEDURE msg_OK (msg : str255); BUILTIN 245;
+{
+PROCEDURE PlinCovered(Plin : In Out entity; covered : boolean); BUILTIN 674;
+PROCEDURE PlinVoidAdd(Parent, Void : In Out entity); BUILTIN 673;
+
+PROCEDURE GetModMat (mat : IN OUT modmat; modaltitude : IN OUT real);	EXTERNAL;
+}
+
+FUNCTION RealEqual (r1, r2 : real; delta : real) : boolean;
+BEGIN
+	IF absr(r1-r2) <= delta THEN
+		return true;
+	END;
+	RETURN false;
+END RealEqual;
+
+
+PROCEDURE SunsEye (entityss : integer; north, azimuth, altitude : real);	PUBLIC;
+VAR
+	b			: boolean;
+	view		: view_type;
+	scalenum	: integer;
+	viewcent	: point;
+	modess		: mode_type;
+	ll, tr,
+	ll2, tr2	: point;
+	first			: boolean;
+	addrss		: entaddr;
+	ent				: entity;
+BEGIN
+	! first remove any existing 'Suns-Eye' views
+	view.next := view_first;
+	WHILE view_get (view, view.next) DO
+		if strcomp(view.name, 'Suns-Eye', -1) then
+			view_del(view);
+		end;
+	END;
+	
+	! get current scalenum to use in the new view
+	view_getcurr (view);
+	scalenum := view.scalenum;
+	
+	! set centre of view at centre of entities
+	ll := view.viewcent;
+	tr := view.viewcent;
+	if entityss >= 0 then
+		mode_init (modess);
+		mode_ss (modess, entityss);
+		mode_enttype (modess, entply);
+		addrss := ent_first (modess);
+		first := true;
+		WHILE ent_get (ent, addrss) DO
+			if first then
+				ent_extent (ent, ll, tr);
+			else
+				ent_extent (ent, ll2, tr2);
+				ll.x := min (ll.x, ll2.x);
+				ll.y := min (ll.y, ll2.y);
+				ll.z := min (ll.z, ll2.z);
+				tr.z := max (tr.z, tr2.z);
+				tr.y := max (tr.y, tr2.y);
+				tr.x := max (tr.x, tr2.x);
+				first := false;
+			end;
+			addrss := ent_next (ent, modess);
+		END;
+	end;
+	viewcent.x := ll.x + (tr.x - ll.x)/2.0;
+	viewcent.y := ll.y + (tr.y - ll.y)/2.0;
+	viewcent.z := ll.z + (tr.z - ll.z)/2.0;
+	
+	! setup the new view
+	view_init (view);
+	view_calcpara (view, viewcent, north+azimuth-pi, -altitude, scalenum);
+	
+	! add new view to the drawing		NOTE: as far as I can see, view_setcurr should work without 
+	! adding the view to the dwg, but this did not seem to work ...
+	view.name := 'Suns-Eye';
+	view_add(view);	
+	
+	! display the view with the surface & entities highlighted
+	view_setcurr (view, true);
+END SunsEye;
+
+END SunEye.
