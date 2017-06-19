@@ -1,27 +1,10 @@
-Copyright Notice:
+Shadow Macro for DataCAD
+Copyright David Henderson 2017 (some rights reserved)
+License applicable from version 0.9.7 onwards
 
-This software is copyright David Henderson 2017.
+This software is distributed free of charge and WITHOUT WARRANTY. You may distribute it to others provided that you distribute the complete unaltered installation file provided by me at the dhsoftware.com.au web site, and that you do so free of charge (This includes not  charging for distribution media and not charging for any accompanying software that is on the same media or contained in the same download or distribution file). 
+If you wish to make any charge at all you need to obtain specific permission from me. 
+ 
+Whilst it is free (or because of this) I would like and expect that if you can think of any improvements or spot any bugs (or even spelling or formatting errors in the documentation) that you would let me know.  Your feedback will help with future development of the macro.
 
-This software is distributed free of charge and without warranty. You may distribute it to others provided that you do so free of charge (including without charge for the distribution media unless explicit permission has been obtained from the author).
-
-This document should always be distributed together with the compiled macro (dcx file).  The source code should always be either distributed with the compiled macro or made freely available to those who receive the macro.
-
-You may modify this software for your own use without limitation.  If you convey a copy of the modified software to others, you may only do so under the following conditions:
-
-1. You either convey your source code (dcs file) together with the compiled macro (dcx file), or else you make the source code freely available to those who receive the macro.   
-        
-2. You convey this document together with the compiled macro, and leave this notice intact.  You should add an additional notice regarding your  changes, provided it does not in any way limit or modify the intention of this notice.
-
-3. The original copyright remains, together with a notice of the modification and the name of the person(s) who made the modification.    
-                                    
-4. You do not charge for the software (including not charging for any distribution media unless explicit permission has been obtained from the author).
-
-5. You allow your modified software to be freely distributed by others. 
-              
-6. You update the version number to indicate that it is your modification. Appending your initials to the original version number would be adequate for this purpose, potentially followed by a numeric version number of your own. (e.g. if Joe Smith produces a modification of version 1.0 of this software, he could version it as 1.0.js.01.  If Joe then makes a further modification he could version it as 1.0.js.01.1 if it is a minor fix or as 1.0.js.02 if it introduces new functionality.)
-
-If you modify the software then you are strongly encouraged to send a copy of your  modifications to the author (David Henderson) and agree that he may (at his discretion)  include your changes in a future version released by him.  If he does include changes provided by you he may make an appropriate notation of your contribution in the source file and/or the accompanying documentation.
-
-You may also contact the author with bug reports or enhancement suggestions.
-
-You may contact the author (David Henderson) by email to dhsoftware1@gmail.com but he is under no obligation to respond to every or any message.             
+Whilst the source code of the macro is available for download, it is not 'open source'. You must not make changes and then make a competing product available to others. You can make changes for your own (or your company's) use, however in general I would prefer that you let me know of your requirements so that I can consider including them in a future release of my software. If in doubt please contact me.
