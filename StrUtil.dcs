@@ -1,5 +1,7 @@
 MODULE StrUtil;
 
+# INCLUDE '..\\..\\Inc\\_misc.inc'
+
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
 FUNCTION msg_dlg (msg : str255; msgDlgType, msgDlgButtons : integer) : integer; BUILTIN 246;
 
@@ -12,7 +14,7 @@ BEGIN
 			return true;
 		end;
 		for i := 1 to strlen(s) do
-			strsub (s, 1, 1, s1);
+			strsub (s, i, 1, s1);
 			if not strcomp (s1, ' ', 1) then
 				return false;
 			end;
@@ -20,6 +22,60 @@ BEGIN
 		return true;
 
 END BlankString;
+
+FUNCTION StartsWith (target : IN string; prefix : IN string; casesensitive : boolean) : boolean;	PUBLIC;
+VAR
+	i : integer;
+	ct, cp	: string(1);
+	t, p	: str255;
+	
+BEGIN
+	if strlen(prefix) > strlen(target) then 
+		return false;
+	end;
+	strassign (t, target);
+	strassign (p, prefix);
+	if not casesensitive then
+		strupcase (t, true);
+		strupcase (p, true);
+	end;
+	for i := 1 to strlen(p) do
+		strsub (t, i, 1, ct);
+		strsub (p, i, 1, cp);
+		if not strcomp (ct, cp, 1) then
+			return false;
+		end;
+	end;
+	return true;
+END StartsWith;
+
+FUNCTION EndsWith (target : string; suffix : string; casesensitive : boolean) : boolean;	PUBLIC;
+VAR
+	i : integer;
+	ct, cs	: string(1);
+	t, s		: str255;
+	lendif	: integer;
+	tempstr : str255;
+BEGIN
+	if strlen(suffix) > strlen(target) then 
+		return false;
+	end;
+	strassign (t, target);
+	strassign (s, suffix);
+	if not casesensitive then
+		strupcase (t, true);
+		strupcase (s, true);
+	end;
+	lendif := strlen(target) - strlen(suffix);
+	for i := 1 to strlen(suffix) do
+		strsub (t, lendif+i, 1, ct);
+		strsub (s, i, 1, cs);
+		if not strcomp (ct, cs, 1) then
+			return false;
+		end;
+	end;
+	return true;
+END EndsWith;
 
 FUNCTION ValidFileName (s : string; strname : string) : integer; 		PUBLIC;
 !!! returns 0 if everything ok, otherwise returns 1 if user presses OK, -1 if user presses Cancel
@@ -89,5 +145,66 @@ BEGIN
 
 END ValidFileName;
 
+
+PROCEDURE AppendDateTimeStamp (Str : IN OUT String; 
+															 doDate : boolean; 
+															 doTime : boolean;
+															 TimeColons : boolean;
+															 spacebetween : boolean);	PUBLIC;
+VAR
+	y,m,d,h,mi,s,hu	: integer; !year, month, day, hours, minutes, seconds, hundredths
+	tempstr				: str255;
+	
+	PROCEDURE Append2DigitStr (num : IN integer);
+	!!! actually allows more than 2 digits, but inserts a zero at the front of the string if it is less than 2 digits
+	BEGIN
+		cvintst (num, tempstr);
+		if strlen(tempstr)<2 then
+			strins (tempstr, '0', 1);
+		end;
+		strcat (str, tempstr);
+	END Append2DigitStr;
+
+BEGIN
+	if not (doDate or doTime) then
+		return;
+	end;
+	ReadClock (y, m, d, h, mi, s, hu);
+	if doDate then
+		Append2DigitStr (y);
+		Append2DigitStr (m);
+		Append2DigitStr (d);
+		if doTime and spacebetween then
+			strcat (str, ' ');
+		end;
+	end;
+	if DoTime then
+		Append2DigitStr (h);
+		if timecolons then
+			strcat (str, ':');
+		end;
+		Append2DigitStr (mi);
+		if timecolons then
+			strcat (str, ':');
+		end;
+		Append2DigitStr (s);
+	end;
+End AppendDateTimeStamp;
+
+
+PROCEDURE RemoveChars (str : IN OUT string; CharsToRemove : string);	PUBLIC;
+VAR
+	ndx, pos		: integer;
+	pat				: string(1);
+BEGIN
+	FOR ndx := 1 to strlen(CharsToRemove) DO
+		strsub(CharsToRemove, ndx, 1, pat);
+		pos := strpos (pat, str, 1);
+		WHILE pos > 0 DO
+			strdel (str, pos, 1);
+			pos := strpos (pat, str, 1);
+		END;
+	END;
+END RemoveChars;
 
 END StrUtil.
