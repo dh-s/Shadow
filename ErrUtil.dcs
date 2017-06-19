@@ -1,5 +1,8 @@
 MODULE ErrUtil;
 
+# INCLUDE 'StrUtil.inc'
+# INCLUDE 'Settings.inc'
+
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
 PROCEDURE execAndWait ( prog : str255; Visibility: integer; returnCode : OUT integer); BUILTIN 632;
 
@@ -70,5 +73,153 @@ BEGIN
 	msg_OK (msg);
 END DisplayVerboseMsg;
 
+VAR
+	LogFile :  file;
+	LogFileName : str80;
+	MacroNm		: str80;
+	logon		: boolean;
+	logging : boolean;
+	
+PROCEDURE InitLog (MacroName : string);		PUBLIC;
+BEGIN
+	logging := false;
+	LogOn := GetSvdBln ('Logging', false);
+	MacroNm := MacroName;
+END InitLog;
+
+PROCEDURE CloseLog;		PUBLIC;
+VAR
+	TempStr : str80;
+	res : integer;
+BEGIN
+	res := f_close (LogFile); 
+	if logging then
+		if DisplayFileError (res, 'closing log file') then
+			logging := false;
+		end;
+	end;
+	if not logging then
+		return;
+	end;
+	TempStr := MacroNm;
+	strcat (TempStr, '.log');
+	if file_exist (TempStr) then
+		res := file_del (TempStr);
+		if DisplayFileError (res, 'Deleting old log file') then
+			return;
+		end;
+	end;
+	res := file_ren (LogFileName, TempStr);
+	if logging then
+		if DisplayFileError (res, 'renaming log file') then
+			logging := false;
+			return;
+		end;
+	end;
+	logging := false;
+END CloseLog;
+
+PROCEDURE OpenLog;		PUBLIC;
+VAR
+	TempStr	: str255;
+	res	: integer;
+BEGIN
+	if not LogOn then
+		logging := false;
+		return;
+	end;
+	Strassign (LogfileName, MacroNm);
+	strcat (LogFileName, '_');
+	AppendDateTimeStamp (LogFileName, true, true, false, false);
+	strcat (LogFileName, '.log');
+	res := f_create (LogFile, LogFileName, true);
+	logging := not DisplayFileError (res, 'opening Log File');
+	if logging then
+		TempStr := 'BEGIN LOG ';
+		AppendDateTimeStamp (TempStr, true, true, true, true);
+		logging := not DisplayFileError (f_wrstr (LogFile, TempStr), 'writing to log file');
+		logging := not DisplayFileError (f_wrln (LogFile), 'writing line to log file');
+	end;
+	if not logging then
+		CloseLog;
+	end;
+END OpenLog;
+
+PROCEDURE LogStr (str : string); 	PUBLIC;
+VAR
+	TempStr	: str255;
+BEGIN
+	if logging then	
+		TempStr := '';
+		AppendDateTimeStamp (TempStr, false, true, true, false);
+		strcat (tempstr, ' ');
+		strcat (TempStr, str);
+		logging := not DisplayFileError (f_wrstr (LogFile, TempStr), 'writing string to log file');
+		logging := not DisplayFileError (f_wrln (LogFile), 'writing line to log file');
+		if not logging then
+			CloseLog;
+		end;
+	end;
+END LogStr;
+
+PROCEDURE LogStrDis (str : string; dis : real); 	PUBLIC;
+VAR
+	s	: str80;
+	TempStr	: str255;
+BEGIN
+	if logging then	
+		TempStr := '';
+		AppendDateTimeStamp (TempStr, false, true, true, false);
+		strcat (tempstr, ' ');
+		strcat (TempStr, str);
+		cvdisst (dis, s);
+		strcat (TempStr, s);
+		logging := not DisplayFileError (f_wrstr (LogFile, TempStr), 'writing string to log file');
+		logging := not DisplayFileError (f_wrln (LogFile), 'writing line to log file');
+		if not logging then
+			CloseLog;
+		end;
+	end;
+END LogStrDis;
+
+PROCEDURE LogStrAng (str : string; ang : real); 	PUBLIC;
+VAR
+	s	: str80;
+	TempStr	: str255;
+BEGIN
+	if logging then	
+		TempStr := '';
+		AppendDateTimeStamp (TempStr, false, true, true, false);
+		strcat (tempstr, ' ');
+		strcat (TempStr, str);
+		cvangst (ang, s);
+		strcat (TempStr, s);
+		logging := not DisplayFileError (f_wrstr (LogFile, TempStr), 'writing string to log file');
+		logging := not DisplayFileError (f_wrln (LogFile), 'writing line to log file');
+		if not logging then
+			CloseLog;
+		end;
+	end;
+END LogStrAng;
+
+PROCEDURE LogStrInt (str : string; i : integer); 	PUBLIC;
+VAR
+	s	: str80;
+	TempStr	: str255;
+BEGIN
+	if logging then	
+		TempStr := '';
+		AppendDateTimeStamp (TempStr, false, true, true, false);
+		strcat (tempstr, ' ');
+		strcat (TempStr, str);
+		cvintst (i, s);
+		strcat (TempStr, s);
+		logging := not DisplayFileError (f_wrstr (LogFile, TempStr), 'writing string to log file');
+		logging := not DisplayFileError (f_wrln (LogFile), 'writing line to log file');
+		if not logging then
+			CloseLog;
+		end;
+	end;
+END LogStrInt;
 
 END ErrUtil.
