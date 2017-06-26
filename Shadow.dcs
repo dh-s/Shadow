@@ -1988,7 +1988,6 @@ BEGIN
 		msg_OK ('No shadows cast on this surface by entity(s)');
 	end;
 	lyr_set (svlyr);
-	if DC191 and VoidsDone then
 		regen;		! the new polyline void builtin procedure can leave underiable artifacts on the screen
 	end;
 	CloseLog;
