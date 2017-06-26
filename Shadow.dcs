@@ -2,15 +2,17 @@
 ! This software is copyright David Henderson 2017                                             !
 !                                                                                             !
 ! This software is distributed free of charge and without warranty. You may distribute it to  !
-! others provided that you distribute the complete unaltered installation file provided by me !                                                                                             !
-! at the dhsofware.com.au web site, and that you do so free of charge (This includes not      !                                                                                             !
+! others provided that you distribute the complete unaltered installation file provided by me !
+!                                                                                             !
+! at the dhsofware.com.au web site, and that you do so free of charge (This includes not      !
+!                                                                                             !
 ! charging for distribution media and not charging for any accompanying software that is on   !
 ! the same media or contained in the same download or distribution file).                     !
 ! If you wish to make any charge at all you need to obtain specific permission from me.       !
 !                                                                                             !
 ! Whilst it is free (or because of this) I would like and expect that if you can think of any !
 ! improvements or spot any bugs (or even spelling or formatting errors in the documentation)  !
-! that you would let me know.  Your feedback will help with future development of the macro   !
+! that you would let me know.  Your feedback will help with future development of the macro.  !
 !                                                                                             !
 ! Whilst the source code of the macro is available for download, it is not 'open source'. You !
 ! must not make changes and then make a competing product available to others. You can make   !
@@ -94,13 +96,14 @@ VAR
 	zheight		: real;
 	
 	Logfile		: file;
+	VoidRegen	: boolean;
 	
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
 FUNCTION msg_dlg (msg : str255; msgDlgType, msgDlgButtons : integer) : integer; BUILTIN 246;
 PROCEDURE execAndWait ( prog : str255; Visibility: integer; returnCode : OUT integer); BUILTIN 632;
 FUNCTION DCAD_Version : real ; BUILTIN 669;
 PROCEDURE PlinCovered(Plin : In Out entity; covered : boolean); BUILTIN 674;
-PROCEDURE PlinVoidAdd(Parent, Void : In Out entity); BUILTIN 673;
+PROCEDURE PlinVoidAdd(Parent, Void : In Out entity; DoDraw : boolean); BUILTIN 673;
 PROCEDURE SunsEye (entityss : integer; north, azimuth, altitude : real);	EXTERNAL;
 
 FUNCTION RealEqual (r1, r2 : real; delta : real) : boolean;
@@ -793,6 +796,7 @@ VAR
 	Svltype	: integer;
 	svclr		: integer;
 	svspc		: real;
+	loopmax	: integer;
 BEGIN
 	if isnil (ent.addr) then
 		return;
@@ -832,7 +836,12 @@ BEGIN
 			tempent.color := clrltgray;
 			tempent.spacing := ent.spacing;
 			tempent.width := ent.width;
-			for i := 1 to ent.plyNpnt do
+			if ent.plyNpnt <= 36 then
+				loopmax := ent.plyNpnt;
+			else
+				loopmax := 35;	!DataCAD 14 onwards can have polygons with more than 36 sides, but DCAL only supports up to 36.
+			end;
+			for i := 1 to loopmax do
 				if i=ent.plyNpnt then
 					j := 1;
 				else
@@ -901,16 +910,21 @@ FUNCTION PlyIsVertical (ply : entity) : boolean;
 VAR
 	btmleft, topright : point;
 	i : integer;
+	tempply	: entity;
 BEGIN
 	if ply.enttype <> entply then
 		return false;
 	end;
-	ent_extent (surface, btmleft, topright);
+	tempply := ply;
+	if ply.plynpnt > 36 then
+		tempply.plynpnt := 36;	! DataCAD 14 onward supports polygons with more than 36 sides, but DCAL only supports 36.
+	end;
+	ent_extent (tempply, btmleft, topright);
 	if (btmleft.x = topright.x) or (btmleft.y = topright.y) then
 		return true;		! is vertical (parallel to either x or y axis)
 	else
-		for i := 1 to surface.plyNpnt do
-			if dis_from_line (btmleft, topright, surface.plypnt[i]) > ABSZero then
+		for i := 1 to tempply.plyNpnt do
+			if dis_from_line (btmleft, topright, tempply.plypnt[i]) > ABSZero then
 				return false;
 			end;
 		end;
@@ -922,12 +936,15 @@ PROCEDURE GetSurface;
 VAR
 	b			: boolean;
 	svsurface	: entity;
+	svzplane	: boolean;
+	svz				: real;
 	bl, tr	: point; 
 BEGIN
-	svsurface := surface;
-	wrtlvl ('Shadow Surface');
-	
 	REPEAT
+		svsurface := surface;
+		svzplane := zplane;
+		svz := zheight;
+		wrtlvl ('Shadow Surface');
 		ReDraw; 	! remove any existing higlighted surface
 		if not zplane then
 			HighlightEnt (surface, true, true);
@@ -991,20 +1008,27 @@ BEGIN
 					mode_enttype (mode, entply);
 					bres := ent_near (surface, pt.x, pt.y, mode, true);
 					IF bres THEN
-						zplane := false;
-						ReDraw;
-						HighlightEnt (surface, true, true);
-						! store the address of the surface as an attribute in the drawing
-						if atr_sysfind ('ShadSurface', atr) then
-							atr.lgladdr := lgl_addr(surface.addr);
-							atr_update (atr);
-							ss := true;
+						if surface.plynpnt > 36 then
+							msg_ok ('Please select a surface polygon with 36 or less sides');
+							surface := svsurface;
+							zplane := svzplane;
+							zheight := svz;
 						else
-							atr_init (atr, atr_addr);
-							atr.name := 'ShadSurface';
-							atr.lgladdr := lgl_addr(surface.addr);
-							atr_add2sys (atr);
-							ss := true;
+							zplane := false;
+							ReDraw;
+							HighlightEnt (surface, true, true);
+							! store the address of the surface as an attribute in the drawing
+							if atr_sysfind ('ShadSurface', atr) then
+								atr.lgladdr := lgl_addr(surface.addr);
+								atr_update (atr);
+								ss := true;
+							else
+								atr_init (atr, atr_addr);
+								atr.name := 'ShadSurface';
+								atr.lgladdr := lgl_addr(surface.addr);
+								atr_add2sys (atr);
+								ss := true;
+							end;
 						end;
 						vertical := PlyIsVertical(surface);
 						SaveBln ('ShadZedPlane',zplane, true);
@@ -1331,10 +1355,10 @@ BEGIN
 				if ent.enttype = entpln then
 					if PntInPln (pnts[1], ent) = 1 then 
 						MyLogStr ('Master pln found');
-						PlinVoidAdd(ent, shad);
+						PlinVoidAdd(ent, shad, false);
 						MyLogStr ('Void added to master pln');
-						ent_draw_dl (ent, drmode_black, true);
-						ent_draw_dl (shad, drmode_black, true);
+            ent_draw_dl (ent, drmode_black, true);
+!            ent_draw_dl (shad, drmode_black, true);
 					end;
 					adr := ent_next (ent, mode);
 				end;
@@ -1644,6 +1668,7 @@ VAR
 	tempent		: entity;
 	entnum		: integer;
 	VoidsDone	: boolean;
+	bigply		: boolean;
 
 	FUNCTION Cast (castent : IN entity; shad : IN OUT entity; isvoid : boolean) : boolean;
 	!!! calculates shadow for ent and returns the shadow in shad. 
@@ -1655,6 +1680,7 @@ VAR
 		abovepnt	: integer;	! index of the first point that is above the surface
 		surfacepnts : pntarr;
 		temppnt		: point;
+		tempent		: entity;
 	BEGIN
 		! do not cast a shadow for the surface in case it is in the entity set
 		if castent.addr = shadow.addr then
@@ -1675,37 +1701,43 @@ VAR
 			MyLogStr ('Shadow was not on underside');
 		end;
 		
-		!set up points as being the points of castent with the modelling matrix applied
+		tempent := castent;
+		if tempent.enttype = entply and tempent.plynpnt > 36 then
+			tempent.plynpnt := 36;	! DataCAD 14 onwards supports polygons with > 36 sides, but DCAL only supports 36
+			bigply := true;
+		end;
+		
+		!set up points as being the points of tempent with the modelling matrix applied
 		below := false;
 		MyLogStr ('Checking for entity points below surface');
-		if castent.enttype = entply or castent.enttype = entplyvd then
-			npoints := castent.plyNpnt;
+		if tempent.enttype = entply or tempent.enttype = entplyvd then
+			npoints := tempent.plyNpnt;
 			abovepnt := 0;
 			for i := 1 to npoints do
-				xformpt (castent.plyPnt[i], mat, points[i]);
+				xformpt (tempent.plyPnt[i], mat, points[i]);
 			end;
-		elsif castent.enttype = entlin then
-			if realequal (castent.linpt1.z, castent.linpt2.z, ABSZero) then
+		elsif tempent.enttype = entlin then
+			if realequal (tempent.linpt1.z, tempent.linpt2.z, ABSZero) then
 			! treat line as a 3D line
 			npoints := 2;
-				xformpt (castent.linpt1, mat, points[1]);
-				xformpt (castent.linpt2, mat, points[2]);
+				xformpt (tempent.linpt1, mat, points[1]);
+				xformpt (tempent.linpt2, mat, points[2]);
 			else
 				! treat line as a vertical polygon
 				npoints := 4;
-				xformpt (castent.linpt1, mat, points[1]);
-				points[2] := castent.linpt1;
-				points[2].z := castent.linpt2.z;
+				xformpt (tempent.linpt1, mat, points[1]);
+				points[2] := tempent.linpt1;
+				points[2].z := tempent.linpt2.z;
 				xformpt (points[2], mat, points[2]);
-				xformpt (castent.linpt2, mat, points[3]);
-				points[4] := castent.linpt2;
-				points[4].z := castent.linpt1.z;
+				xformpt (tempent.linpt2, mat, points[3]);
+				points[4] := tempent.linpt2;
+				points[4].z := tempent.linpt1.z;
 				xformpt (points[4], mat, points[4]);
 			end;
-		elsif castent.enttype = entln3 then
+		elsif tempent.enttype = entln3 then
 			npoints := 2;
-			xformpt (castent.ln3Pt1, mat, points[1]);
-			xformpt (castent.ln3Pt2, mat, points[2]);
+			xformpt (tempent.ln3Pt1, mat, points[1]);
+			xformpt (tempent.ln3Pt2, mat, points[2]);
 		end;
 
 		for i := 1 to npoints do
@@ -1725,7 +1757,7 @@ VAR
 		if below then
 			MyLogStr ('Part entity below surface. Identifying points and intersections with surface');
 			i := 1;
-			while (i <= npoints and castent.enttype <> entln3)  or (castent.enttype = entln3 and i < npoints) do
+			while (i <= npoints and tempent.enttype <> entln3)  or (tempent.enttype = entln3 and i < npoints) do
 				j := i+1;
 				if j > npoints then
 					j := 1;
@@ -1786,7 +1818,7 @@ VAR
 
 		! create polyline entity(s) with these points
 		if trim and (not zplane) then
-			if (castent.enttype = entln3) or (castent.enttype = entlin and npoints=2) then
+			if (tempent.enttype = entln3) or (tempent.enttype = entlin and npoints=2) then
 				MyLogStr ('Creating trimmed ln3 shadow');
 				if CreateTrimmedLn3 (points[1], points[2], surfacepnts, surface.plynpnt, shad) = -1 then
 					MyLogStr ('No Shadow for this ln3');
@@ -1801,7 +1833,7 @@ VAR
 				end;
 				MyLogStr ('ply shadow created');
 			end;
-		elsif (castent.enttype = entln3) or (castent.enttype = entlin and npoints=2) then
+		elsif (tempent.enttype = entln3) or (tempent.enttype = entlin and npoints=2) then
 			MyLogStr ('Creating ln3 shadow');
 			return CreateShadLn3 (points[1], points[2], shad);
 		else
@@ -1873,6 +1905,7 @@ BEGIN
 	addr := ent_first (entmode);
 	entnum := 0;
 	VoidsDone := false;
+	bigply := false;
 	WHILE ent_get (ent, addr) and shadowcreated < 32750 DO
 		IF (ent.addr <> surface.addr) and 
 			 (((ent.enttype = entply) and doPly) or 
@@ -1987,82 +2020,17 @@ BEGIN
 		wrterr ('');
 		msg_OK ('No shadows cast on this surface by entity(s)');
 	end;
+	if voidregen and DC191 and VoidsDone then
+    regen;    ! the new polyline void builtin procedure can leave underiable artifacts on the screen
+	end;
+	if bigply then
+		msg_OK ('Polygon with more than 36 sides was processed - shadow may not be correct');
+	end;
 	lyr_set (svlyr);
-		regen;		! the new polyline void builtin procedure can leave underiable artifacts on the screen
-	end;
+
 	CloseLog;
-	
+
 END GenShadows;
-{
-PROCEDURE SunsEye;
-VAR
-	b			: boolean;
-	view		: view_type;
-	scalenum	: integer;
-	viewcent	: point;
-	modess		: mode_type;
-	ll, tr,
-	ll2, tr2	: point;
-	first			: boolean;
-	addrss		: entaddr;
-	ent				: entity;
-BEGIN
-	! first remove any existing 'Suns-Eye' views
-	view.next := view_first;
-	WHILE view_get (view, view.next) DO
-		if strcomp(view.name, 'Suns-Eye', -1) then
-			view_del(view);
-		end;
-	END;
-	
-	! get current scalenum to use in the new view
-	view_getcurr (view);
-	scalenum := view.scalenum;
-	
-	! set centre of view at centre of entities
-	ll := view.viewcent;
-	tr := view.viewcent;
-	if entityss >= 0 then
-		mode_init (modess);
-		mode_ss (modess, entityss);
-		mode_enttype (modess, entply);
-		addrss := ent_first (modess);
-		first := true;
-		WHILE ent_get (ent, addrss) DO
-			if first then
-				ent_extent (ent, ll, tr);
-			else
-				ent_extent (ent, ll2, tr2);
-				ll.x := min (ll.x, ll2.x);
-				ll.y := min (ll.y, ll2.y);
-				ll.z := min (ll.z, ll2.z);
-				tr.z := max (tr.z, tr2.z);
-				tr.y := max (tr.y, tr2.y);
-				tr.x := max (tr.x, tr2.x);
-				first := false;
-			end;
-			addrss := ent_next (ent, modess);
-		END;
-	end;
-	viewcent.x := ll.x + (tr.x - ll.x)/2.0;
-	viewcent.y := ll.y + (tr.y - ll.y)/2.0;
-	viewcent.z := ll.z + (tr.z - ll.z)/2.0;
-	
-	! setup the new view
-	view_init (view);
-	view_calcpara (view, viewcent, north+azimuth-pi, -altitude, scalenum);
-	
-	! add new view to the drawing		NOTE: as far as I can see, view_setcurr should work without 
-	! adding the view to the dwg, but this did not seem to work ...
-	view.name := 'Suns-Eye';
-	view_add(view);	
-	
-	! display the view with the surface & entities highlighted
-	view_setcurr (view, true);
-	HighlightEnt (surface, true, true);
-	HighlightSS (entityss, true, false);
-END SunsEye;
-}
 
 PROCEDURE GetSpecColour;
 BEGIN
@@ -2124,7 +2092,7 @@ BEGIN
 			lblmsg (9, 'Hatch the same colour as the shadow outlines');
 			lblsett (10, 'Set Clr', hatchclr >= 0);
 			if hatchclr >= 0 then
-				clrGetName (hatchclr, tempstr);
+				GetClrName (hatchclr, tempstr);
 				strins (tempstr, 'Set hatch colour (', 1);
 				strcat (tempstr, ')');
 			else
@@ -2181,7 +2149,7 @@ VAR
 	r	: real;
 	s : str80;
 BEGIN
-	namever :='Shadow v0.9.07   Copyright D Henderson 2017.';
+	namever :='Shadow v0.9.09   Copyright D Henderson 2017.';
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
 	showprogress := false; ! disabled as update of progress display was unreliable, even though processing was proceeding ok
@@ -2281,7 +2249,7 @@ BEGIN
 			DC191 := true;
 		end;
 	end;
-	wrterr ('Press F11 for macro documentation');
+	VoidRegen := GetSvdBln ('VoidRegen', false);
 END Initialise;
 
 BEGIN
@@ -2381,7 +2349,7 @@ BEGIN
 		lblsett (13, 'Spec Clr', colour >= 0);
 		tempstr := 'Specify a colour to draw shadows';
 		if colour > 0 then
-			clrGetName (colour, str);
+			GetClrName (colour, str);
 			strcat (tempstr, ' (');
 			strcat (tempstr, str);
 			strcat (tempstr, ')');
@@ -2407,15 +2375,15 @@ BEGIN
 		lblset (18, 'Start');
 		lblmsg (18, 'Generate shadows for selected entities');
 
-		!lblsett (19, 'Show Progress', showprogress);
-		!lblmsg (19, 'Show progress whilst processing shadows (may slow processing down a bit)');
+		lblset (19, 'Documentation');
+		lblmsg (19, 'Display the instruction document for this macro.');
 		
 		lblset (20, 'Exit');
 
 		lblson;
 		
-		getchar (key);
-		IF key=389 THEN	!F11
+		getesc (key);
+		IF key = s9 THEN
 			ExecAndWait ('ShadHelp.exe', 1, res);
 			if res <> 0 then
 				beep;
@@ -2460,12 +2428,10 @@ BEGIN
 			GetShadowLyr;
 		ELSIF key = s8 THEN
 			GenShadows;
-		ELSIF key = s9 THEN
-			showprogress := not showprogress;
+{		ELSIF key = s9 THEN
+			showprogress := not showprogress;}
 		ELSIF key = s0 THEN
 			done := true;
-		ELSE
-			GlobalEsc(key);
 		END;
 
 	UNTIL done;

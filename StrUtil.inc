@@ -14,5 +14,7 @@ PROCEDURE AppendDateTimeStamp (Str : IN OUT String;
  
 PROCEDURE RemoveChars (str : IN OUT string; CharsToRemove : string);	EXTERNAL;
 
+PROCEDURE GetClrName (clr : IN integer; clrname : OUT string);	EXTERNAL;
+
 
 

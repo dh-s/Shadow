@@ -207,4 +207,26 @@ BEGIN
 	END;
 END RemoveChars;
 
+PROCEDURE GetClrName (clr : IN integer; clrname : OUT string);	PUBLIC;
+! this replaces the standard clrGetName procedure. The clrGetName proc will output
+! a maximum of 8 character string, which means that the result is sometimes misleading
+! due to the string being truncated (e.g. Color_085 gets truncated to Color_08)
+VAR
+	str, str1	: str80;
+BEGIN
+	clrGetName (clr, str);
+	if clr > 99 then
+		cvintst (clr, str1);
+		strins (str1, 'Color_', 1);
+		if StartsWith (str1, str, false) then
+			clrname := str1;
+		else
+			clrname := str;
+		end;
+	else
+		clrname := str;
+	end;
+
+END GetClrName;
+
 END StrUtil.
