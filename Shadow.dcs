@@ -1,0 +1,2441 @@
+!---------------------------------------------------------------------------------------------!
+! This software is copyright David Henderson 2017                                             !
+!                                                                                             !
+! This software is distributed free of charge and without warranty. You may distribute it to  !
+! others provided that you distribute the complete unaltered installation file provided by me !
+!                                                                                             !
+! at the dhsofware.com.au web site, and that you do so free of charge (This includes not      !
+!                                                                                             !
+! charging for distribution media and not charging for any accompanying software that is on   !
+! the same media or contained in the same download or distribution file).                     !
+! If you wish to make any charge at all you need to obtain specific permission from me.       !
+!                                                                                             !
+! Whilst it is free (or because of this) I would like and expect that if you can think of any !
+! improvements or spot any bugs (or even spelling or formatting errors in the documentation)  !
+! that you would let me know.  Your feedback will help with future development of the macro.  !
+!                                                                                             !
+! Whilst the source code of the macro is available for download, it is not 'open source'. You !
+! must not make changes and then make a competing product available to others. You can make   !
+! changes for your own (or your company's) use, however in general I would prefer that you let!
+! me know of your requirements so that I can consider including them in a future release of my!
+! software. If in doubt please contact me.                                                    !
+!                                                                                             !
+!                                                                                             !
+! Contact Details for David Henderson:   dhsoftware1@gmail.com      www.dhsoftware.com.au     !
+!                                                                                             !
+!---------------------------------------------------------------------------------------------!
+
+
+PROGRAM Shadow;
+
+# INCLUDE '..\\..\\Inc\\_pline.inc'
+# INCLUDE '..\\..\\Inc\\_misc.inc'
+# INCLUDE '..\\..\\Inc\\_hatch.inc'
+
+# INCLUDE 'pntutil.inc'
+# INCLUDE 'Errutil.inc'
+# INCLUDE 'Settings.inc'
+# INCLUDE 'StrUtil.inc'
+# INCLUDE 'SolidFll.inc'
+# INCLUDE 'Arrows.inc'
+# INCLUDE 'LyrUtil.inc'
+
+CONST
+   ssNum  = 11;
+   entplyvd = 28;
+
+VAR
+	DCVer		: real;		! 190001.0 for Dcad 19
+	DC191, DC190 : boolean;
+	namever		: string(100);
+	mat, invmat		: modmat;
+	north		: real;
+	altitude    : real;
+	azimuth		: real;
+	sunposmsg	: str80;
+	
+	surface		: entity;
+	
+	mode		: mode_type;
+	pt			: point;
+	key, res	: integer;
+	bres		: boolean;
+	
+	atr			: attrib;
+	str, str1	: string(64);
+	done		: boolean;
+
+	entityss	: integer;
+	ss				: boolean;	! flags to indicate if a surface has been selected
+
+	origin		: point;
+	tempstr		: str255;
+	tempbln		: boolean;
+
+	colour		: integer;
+	entclr		: integer;
+	trim			: boolean;
+	lyrname		: str80;
+	lyr				: layer;
+	svlyr			: layer;
+	hatchlines: integer;		!0 = No Hatch,  1 = parralel lines,  2 =CrossHatch,  5 = solid fill
+	hatchspace: real;
+	hatchclr	: integer;
+	hatchang	: real;
+	hmin, hmax, hmin1, hmax1	: point;
+	extent1		: boolean;
+	vertical	: boolean;
+	toponly		: boolean;
+	showprogress : boolean;
+	
+	doPly			: boolean;
+	doLin			: boolean;
+	doLn3			: boolean;
+	
+	zplane		: boolean;
+	zheight		: real;
+	
+	Logfile		: file;
+	VoidRegen	: boolean;
+	
+PROCEDURE msg_OK (msg : str255); BUILTIN 245;
+FUNCTION msg_dlg (msg : str255; msgDlgType, msgDlgButtons : integer) : integer; BUILTIN 246;
+PROCEDURE execAndWait ( prog : str255; Visibility: integer; returnCode : OUT integer); BUILTIN 632;
+FUNCTION DCAD_Version : real ; BUILTIN 669;
+PROCEDURE PlinCovered(Plin : In Out entity; covered : boolean); BUILTIN 674;
+PROCEDURE PlinVoidAdd(Parent, Void : In Out entity; DoDraw : boolean); BUILTIN 673;
+PROCEDURE SunsEye (entityss : integer; north, azimuth, altitude : real);	EXTERNAL;
+
+FUNCTION RealEqual (r1, r2 : real; delta : real) : boolean;
+BEGIN
+	IF absr(r1-r2) <= delta THEN
+		return true;
+	END;
+	RETURN false;
+END RealEqual;
+
+PROCEDURE MyLogStr (str : string);
+BEGIN
+	LogStr (str);
+END MyLogStr;
+{
+PROCEDURE RemoveChars (str : IN OUT string; CharsToRemove : string);
+VAR
+	ndx, pos		: integer;
+	pat				: string(1);
+BEGIN
+	FOR ndx := 1 to strlen(CharsToRemove) DO
+		strsub(CharsToRemove, ndx, 1, pat);
+		pos := strpos (pat, str, 1);
+		WHILE pos > 0 DO
+			strdel (str, pos, 1);
+			pos := strpos (pat, str, 1);
+		END;
+	END;
+END RemoveChars;
+}
+PROCEDURE EncodeEntTyp (str : IN OUT string);
+BEGIN
+	str := '';
+	if doPly then
+		strcat (str, 'Y');
+	else
+		strcat (str, 'N');
+	end;
+	if doLin then
+		strcat (str, 'Y');
+	else
+		strcat (str, 'N');
+	end;
+	if doLn3 then
+		strcat (str, 'Y');
+	else
+		strcat (str, 'N');
+	end;
+END EncodeEntTyp;
+
+PROCEDURE DecodeEntTyp (str : string);
+VAR
+	s	: str8;
+BEGIN
+	if strlen(str) >= 1 then
+		strsub (str, 1, 1, s);
+		doPly := strpos ('Y', s, 1) = 1;
+	else
+		doPly := true;
+	end;
+	if strlen(str) >= 2 then
+		strsub (str, 2, 1, s);
+		doLin := strpos ('Y', s, 1) = 1;
+	else
+		doLin := true;
+	end;
+	if strlen(str) >= 3 then
+		strsub (str, 3, 1, s);
+		doLn3 := strpos ('Y', s, 1) = 1;
+	else
+		doLn3 := true;
+	end;
+END DecodeEntTyp;
+
+PROCEDURE GetNorth;
+VAR
+	ang			: real;
+	result, key	: integer;
+	p1, p2		: point;
+	done		: boolean;
+	atr			: attrib;
+	
+	PROCEDURE SaveNorth;
+	BEGIN
+		if atr_sysfind ('ShadowNorth', atr) then
+			atr.ang := north;
+			atr_update (atr);
+		else
+			atr_init (atr, atr_ang);
+			atr.name := 'ShadowNorth';
+			atr.ang := north;
+			atr_add2sys (atr);
+		end;
+	END SaveNorth;
+	
+BEGIN
+	ShowArrow (north, 'CURRENT NORTH', clrWhite);
+	lblsinit;
+	lblset (20, 'Exit');
+	lblson;
+	
+	ang := north;
+	
+	REPEAT
+		wrtmsg ('Select first point to define North');
+		result := getpoint (p1, key);
+		IF result = res_escape THEN
+			IF key = s0 THEN
+				north := ang;
+				return;
+			END;
+		ELSE
+			done := true;
+		END;
+	UNTIL done;
+	REPEAT
+		wrtmsg ('Select a point that is due north of the point just entered');
+		rubln := true;
+		result := getpoint (p2, key);
+		IF result = res_escape THEN
+			IF key = s0 THEN
+				north := ang;
+			END;
+		ELSE
+			ang := angle (p1, p2);
+			done := true;
+		END;
+	UNTIL done;
+	north := ang;
+	Redraw;
+	ShowArrow (north, 'NORTH', clrWhite);
+	SaveNorth;
+END GetNorth;
+
+PROCEDURE GetAzimuth;
+VAR
+	ang			: real;
+	result, key	: integer;	
+BEGIN
+	ang := azimuth;
+	lblsinit;
+	lblset (20, 'Exit');
+	lblson;
+	wrtmsg ('Enter sun azimuth: ');
+	result := dgetang (ang, key);		! note: using dgetang instead of getang because the standard function key angles are unlikely to be suitable
+	IF result = res_normal THEN
+		if azimuth <> ang then
+			sunposmsg := '';	! azimuth has been changed, so clear any msg about a saved setting
+			SaveStr ('ShadSunPosMg', sunposmsg, false);
+		end;
+		azimuth := ang;
+		SaveAng ('Shad_Azimuth', azimuth, false);
+	END;
+	wrtmsg('');
+END GetAzimuth;
+
+PROCEDURE GetAltitude;
+VAR
+	ang			: real;
+	result, key	: integer;	
+BEGIN
+	ang := altitude;
+	lblsinit;
+	lblset (20, 'Exit');
+	lblson;
+	wrtmsg ('Enter sun altitude: ');
+	result := dgetang (ang, key);		! note: using dgetang instead of getang because the standard function key angles are unlikely to be suitable
+	IF result = res_normal THEN
+		if altitude <> ang then
+			sunposmsg := '';	! altitude has been changed, so clear any msg about a saved setting
+			SaveStr ('ShadSunPosMg', sunposmsg, false);
+		end;
+		altitude := ang;
+		SaveAng ('ShadAltitude', altitude, false);
+	END;
+	wrtmsg('');
+END GetAltitude;
+
+
+PROCEDURE SaveSunPos;
+!!! creates a file in a Shad folder within the datacad macro directory. The file is named as per the
+!!! function key label entered by the user, with an extension of '.sun'.
+!!! I have chosen to make this a text file so that it is user readable. A separate file is created for
+!!! each different setting (if the user enters a label that has previously been saved then the existing
+!!! file with that name is simply overwritten without warning).
+!!! Each file contains the following information:
+!!!     function key label
+!!!     function key message
+!!!     azimuth (as text, in radians)
+!!!     altitude (as text, in radians)
+!!! The use of a separate file for each saved setting may not be the most efficient from the point of 
+!!! view of the file system, but seems the easiest to implement with the file tools available to DCAL.
+VAR
+	fl			: file;
+	res, key	: integer;
+	desc		: str80;
+	lbl, str	: string(24);
+	path		: str255;
+	filename	: str255;
+	buf			: dosbuf;
+	b			: boolean;
+BEGIN
+	lbl := '';	! default to blank label to stop old values hanging around
+	b := false;
+	REPEAT
+		lblsinit;
+		lblset (20, 'Exit');
+		wrtmsg ('Enter function key label: ');
+		lblson;
+		res := dgetstr (lbl, 24, key);
+		wrterr ('');
+		IF res = res_escape THEN
+			IF key = s0 THEN
+				wrtmsg('');
+				return;
+			END;
+		ELSE
+			res := ValidFileName (lbl, 'Function key label');
+			if res = -1 then
+				wrtmsg ('');
+				return;
+			elsif res = 0 then
+				b:= true;
+			end;
+		END;
+	UNTIL b;
+	
+	!set a default value for description
+	strassign (desc, lbl);
+	strcat (desc, ' (Azimuth=');
+	cvangst (azimuth, str);
+	strcat (desc, str);
+	strcat (desc, ', Altitude=');
+	cvangst (altitude, str);
+	strcat (desc, str);
+	strcat (desc, ')');
+	
+	lblsinit;
+	lblson;
+	wrtmsg ('Enter description: ');
+	getstr (desc, 80);
+	
+	getpath (path, pathmcr);
+	strcat (path, 'Shad\\*');	! asterisk added for file_pattern call
+	file_pattern (path, 0, buf);
+	strdel (path, strlen(path), 1);		! remove asterisk for later processing when we construct the file name
+	IF NOT file_find (filename, res, buf) THEN	! check if the directory already exists, if not then create it
+		res := mkdir (path);
+		b := DisplayFileError (res, 'creating folder');
+	END;
+	
+	! construct a file name including the full path information
+	strassign (filename, lbl);
+	strins (filename, path, 1);
+	strcat (filename, '.sun');
+	
+	IF file_exist (filename) THEN
+		res := file_del (filename);
+		IF res <> fl_ok THEN
+			msg_OK ('Error updating existing setting');
+			return;
+		END;
+	END;
+
+	res := f_create (fl, filename, true);
+	IF res = fl_ok THEN
+		res := f_wrstr (fl, lbl);
+	END;
+	IF res = fl_ok THEN
+		res := f_wrln (fl);
+	END;
+	IF res = fl_ok THEN
+		res := f_wrstr (fl, desc);
+	END;
+	IF res = fl_ok THEN
+		res := f_wrln (fl);
+	END;
+	IF res = fl_ok THEN
+		cvrllst (azimuth, str);
+		res := f_wrstr (fl, str);
+	END;
+	IF res = fl_ok THEN
+		res := f_wrln (fl);
+	END;
+	IF res = fl_ok THEN
+		cvrllst (altitude, str);
+		res := f_wrstr (fl, str);
+	END;
+	IF res = fl_ok THEN
+		res := f_wrln (fl);
+	END;
+	
+	IF DisplayFileError (res, 'saving to file') THEN
+		res := f_close (fl);	! should try to close the file, but not really any point checking the result
+		return;
+	END;
+	
+	res := f_close (fl);
+
+	IF NOT DisplayFileError (res, 'closing file') THEN
+		wrtmsg ('Sun Postion saved');
+		strassign (sunposmsg, lbl);
+		SaveStr ('ShadSunPosMg', sunposmsg, false);
+	END;
+END SaveSunPos;
+
+PROCEDURE GetSunPos;
+VAR
+	filter		: str80; 
+	s80				: str80;
+	result, key	: integer;
+	saved		: array [6..19, 1..2] of real;		! used to store saved azimuth and altitude related to each function key
+	savedlbl	: array [6..19] of string(24);
+	b : boolean;
+	r : real;
+
+	
+	PROCEDURE ShowSaved;
+	VAR
+		path		: str255;
+		pathfilter	: str255;
+		filename	: str255;
+		buf			: dosbuf;
+		fkey		: integer;
+		attr		: integer;
+		fl			: file;
+		errorflag	: boolean;
+		lbl, msg, s	: str255;
+
+	BEGIN
+		! initialise savedlbl array
+		for key := 6 to 19 do
+			savedlbl[key] := '';
+		end;
+
+		! set the path variable up as a wildcard definition for the filtered sun files
+		getpath (path, pathmcr);
+		strcat (path, 'Shad\\');
+		strassign (pathfilter, path);
+		strcat (pathfilter, filter);
+		strcat (pathfilter, '*.sun');		
+		file_pattern (pathfilter, 0, buf);
+		! cycle through the matching files to set up function keys 6 thru 19 ... if there are more matching files than that then just ignore the remaining ones
+		fkey := 6;
+		ErrorFlag := false;
+		WHILE file_find (filename, attr, buf) AND fkey <= 19 DO
+			strins (filename, path, 1);
+			result := f_open (fl, filename, true, fmode_read);
+			ErrorFlag := DisplayFileError (result, 'opening saved sunpos file');
+			IF NOT ErrorFlag THEN
+				result := f_rdstr (fl, lbl);
+				ErrorFlag := DisplayFileError (result, 'reading function key label');
+			END;
+			IF NOT ErrorFlag THEN
+				result := f_rdln (fl);
+				ErrorFlag := DisplayFileError (result, 'reading ln after lbl');
+			END;
+			IF NOT ErrorFlag THEN
+				result := f_rdstr (fl, msg);
+				ErrorFlag := DisplayFileError (result, 'reading function key message');
+			END;
+			IF NOT ErrorFlag THEN
+				result := f_rdln (fl);
+				ErrorFlag := DisplayFileError (result, 'reading ln after msg');
+			END;
+			IF NOT ErrorFlag THEN
+				result := f_rdstr (fl, s);
+				ErrorFlag := DisplayFileError (result, 'reading azimuth');
+			END;
+			IF NOT ErrorFlag THEN
+				ErrorFlag := not cvstrll (s, saved[fkey, 1]);
+			END;
+			IF ErrorFlag THEN
+				msg_OK ('Error reading saved azimuth');
+			ELSE
+				result := f_rdln (fl);
+				ErrorFlag := DisplayFileError (result, 'reading ln after azimuth');
+			END;
+			IF NOT ErrorFlag THEN
+				result := f_rdstr (fl, s);
+				ErrorFlag := DisplayFileError (result, 'reading altitude');
+			END;
+			IF NOT ErrorFlag THEN
+				ErrorFlag := not cvstrll (s, saved[fkey, 2]);
+			END;
+			IF ErrorFlag THEN
+				msg_OK ('Error reading saved altitude');
+			ELSE
+				! if we get here then we have everything we need to display the saved sun angle on a function key
+				lblset (fkey, lbl);
+				lblmsg (fkey, msg);
+				strassign (savedlbl[fkey], lbl);
+			END;
+
+			result := f_close (fl);		! try to close the file regardless of any errors that may have occurred
+			ErrorFlag := DisplayFileError ( result, 'closing file');
+			fkey := fkey+1;
+		END;
+	END ShowSaved;
+	
+	FUNCTION GetSaved (ndx : integer) : boolean;
+	BEGIN
+		if strlen (savedlbl[ndx]) = 0 then
+			Beep;
+			return false;
+		end;
+		azimuth := Saved[ndx, 1];
+		altitude := Saved[ndx, 2];
+		strassign (sunposmsg, savedlbl[ndx]);  
+		SaveAng ('ShadAltitude', altitude, false);
+		SaveAng ('Shad_Azimuth', azimuth, false);
+		SaveStr ('ShadSunPosMg', sunposmsg, false);
+		return true;
+	END GetSaved;
+	
+BEGIN
+	wrterr('');
+	REPEAT
+		! initialize saved settings filter
+		GetSvdStr ('ShadSvFilter', '', filter);
+		b := false;
+		wrtlvl ('Sun Position');
+		lblsinit;
+		wrtmsg ('Select Sun Position (Altitude, Azimuth)');
+		lblset (1, 'Enter Position');
+		cvangst (azimuth, str);
+		strins (str, ', Azimuth:', 1);
+		cvangst (altitude, tempstr);
+		strins (str, tempstr, 1);
+		strins (str, 'Altitude', 1);
+		if strlen (sunposmsg) > 0 then
+			strins (str, ' (', 1);
+			strins (str, sunposmsg, 1);
+			strcat (str, ')');
+		end;
+		lblmsg (1, str);
+		lblset (2, 'Save');
+		lblmsg (2, 'Save the current azimuth/altitude for future use in any drawing');
+		lblset (3, 'Sun Calculator');
+		lblmsg (3, 'Use the Sun Position Calculator to set altitude & azimuth');
+		if strlen(filter) > 0 then
+			lblsett (5, filter, true);
+		else
+			lblsett (5, 'Filter', false);
+		end;
+		if strlen(filter)= 0 then
+			lblmsg (5, 'Set a filter for display of saved sun positions on function keys');
+		else
+			tempstr := 'Filter in use: ';
+			strcat (tempstr, filter);
+			lblmsg (5, tempstr);
+		end;
+		
+		ShowSaved;	!positions 6 thru 19 for saved settings
+		
+		lblset (20, 'Exit');
+		
+		getesc (key);
+		IF key = f1 THEN
+			GetAltitude;
+			GetAzimuth;
+		ELSIF key = f2 THEN
+			SaveSunPos;
+		ELSIF key =F3 THEN
+			SaveIniStr ('Filter', '');
+			SaveIniRl ('ShadAltitude', 0.0);
+			ExecAndWait ('SunPos.exe', 1, res);
+			if res = 0 then
+				GetIniStr ( 'ShadSunPosMg', '', sunposmsg);
+				GetIniStr ('Filter', '', s80);
+				if strlen (s80) > 0 then
+					strassign (filter, s80);
+					SaveStr ('ShadSvFilter', filter, false);
+				end;
+				r :=GetIniRl ('ShadAltitude', altitude);
+				if r <> 0.0 then
+					altitude := r;
+					azimuth := GetIniRl ('Shad_Azimuth', azimuth);
+					SaveStr ('ShadSunPosMg', sunposmsg, false);
+					SaveAng ('Shad_Azimuth', azimuth, false);
+					SaveAng ('ShadAltitude', altitude, false);
+					strassign (tempstr, sunposmsg);
+					strcat (tempstr, ' set as sun position');
+					wrterr (tempstr);
+					return;
+				end;
+			end;
+
+		ELSIF key = f5 THEN
+			if strlen(filter) > 0 then
+				filter := '';				! note: need to toggle filter to enable it to be removed - getstr & dgetstr do not appear to allow you to update a string to a blank value ?!
+			else
+				wrtmsg ('Enter filter to apply to displayed saved settings: ');
+				lblsinit;
+				lblset (20, 'Exit');
+				lblson;
+				result := dgetstr (filter, 24, key);
+				wrtmsg ('');
+			end;
+			SaveStr ('ShadSvFilter', filter, false);
+			
+		ELSIF (key>=f6) and (key <= f0) THEN	! one of the saved values between F6 & F0 has been selected
+			b := GetSaved (key - f6 + 6);
+		ELSIF (key>=s1) and (key <= s9) THEN	! one of the saved values between S1 & S9 has been selected
+			b := GetSaved (key - s1 + 11);
+		ELSIF key = s0 THEN
+			return;
+		END;
+		
+		if b then
+			strassign (tempstr, sunposmsg);
+			strcat (tempstr, ' set as Sun Position');
+			wrterr (tempstr);
+			return;
+		end;
+	UNTIL false;
+END GetSunPos;
+	
+PROCEDURE GetModMat (mat : IN OUT modmat; modaltitude : IN OUT real);
+!!! This procedure will calculate a transformation that can be applied to move the surface to be in the horizontal plane
+!!! at a z height of zero.  This simplifies subsequent calculations.
+!!! The proc also returns the modified altitude of the sun (after the transformation has been applied).
+VAR
+	h_rotation	: real;
+	i			: integer;
+	minp, maxp	: point;
+	tanang, ang	: real;
+	miny, maxy	: real;
+	matrotdone	: boolean;
+	sunvec		: array [0..1] of point;
+	rad, planang: real;
+	mod_surface	: entity;
+	sunvector	: array [0..1] of point;	! stores the direction of the suns rays as being from points [0] to [1]
+											! which makes it easy to modify the sun direction using a modelling matrix
+											! to modify the points.
+BEGIN
+	if zplane then
+		settran (mat, 0.0, 0.0, -zheight);
+		LogStrDis ('zPlane matrix done, z=', zheight);
+	else
+		matrotdone := false;
+		! find the max & min x values of the points in the surface polygon - then use the corresponding points to create
+		! a rotation transformation around the y axis
+		ent_extent (surface, minp, maxp);
+
+		! check that minp & maxp x & y values are different.  If not then surface is vertical and parallel
+		! to either the y or x axis, so just a single rotation of -90 degrees around the y or x axis is required.
+		if RealEqual (minp.x, maxp.x, 0.01) then
+			setrotate (mat, -halfpi, y);
+			MyLogStr ('Matrix rotation done (parralel to x-axis)');
+			matrotdone := true;
+		elsif RealEqual (minp.y, maxp.y, 0.01) then
+			setrotate (mat, -halfpi, x);
+			MyLogStr ('Matrix rotation done (parralel to y-axis)');
+			matrotdone := true;
+		elsif RealEqual (minp.z, maxp.z, 0.01) then
+			settran (mat, 0.0, 0.0, 0.0);		! no rotation required
+			LogStrDis ('Matrix rotation done - horizontal at z=', minp.z);
+			matrotdone := true;
+		else
+			! set minp & Maxp to the actual points with min & max x values.
+			MyLogStr ('Start Rotation Calculation');
+			minp := surface.plyPnt[1];
+			maxp := minp;
+			FOR i := 2 to surface.plyNpnt DO
+				if surface.plyPnt[i].x < minp.x then
+					minp := surface.plyPnt[i];
+				end;
+				if surface.plyPnt[i].x > maxp.x then
+					maxp := surface.plyPnt[i];
+				end;
+			END;
+		
+			! rotate about the z axis so that the line between max & min is
+			! parallel to the x axis
+			MyLogStr ('Start first z rotation');
+			tanang := (maxp.y - minp.y)/(maxp.x - minp.x);
+			ang := atan(tanang);
+			LogStrAng ('First z rotation: ', ang);
+			setrotrel (mat, -ang, z, minp);
+			
+			! set up mod_surface by applying the transformation to surface
+			MyLogStr ('Setting up surface');
+			mod_surface := surface;
+			FOR i:=1 to mod_surface.plyNpnt DO
+				xformpt (surface.plyPnt[i], mat, mod_surface.plyPnt[i]);
+				if i= 1 then
+					miny := mod_surface.plyPnt[1].y;
+					maxy := mod_surface.plyPnt[1].y;
+				else
+					miny := min (miny, mod_surface.plyPnt[i].y);
+					maxy := max (maxy, mod_surface.plyPnt[i].y);
+				end;
+			END;
+			MyLogStr ('Surface set up');
+
+			if RealEqual (miny, maxy, 0.01) then
+				! it is vertical, and now parallel to the x axis, so just needs
+				! to be rotated about the x axis;
+				MyLogStr ('Mod Surface not parralel to x axis');
+				catrotate (mat, -halfpi, x);
+				matrotdone := true;
+				MyLogStr ('Matrix rotation done');
+			else
+				! not vertical, calculate rotation about the y axis
+				MyLogStr ('About to rotat about y-axis');
+				xformpt (minp, mat, minp);
+				xformpt (maxp, mat, maxp);
+				tanang := (maxp.z - minp.z)/(maxp.x - minp.x);
+				ang := atan(tanang);
+				LogStrAng ('Rotation angle about y axis:', ang);
+				catrotrel (mat, ang, y, minp);
+			end;
+		end;
+		
+		! set up mod_surface by applying the transformation to surface
+		MyLogStr ('Setting up surface (2)');
+		mod_surface := surface;
+		FOR i:=1 to mod_surface.plyNpnt DO
+			xformpt (surface.plyPnt[i], mat, mod_surface.plyPnt[i]);
+		END;	
+		MyLogStr ('Surface set up (2)');
+
+		! add a rotation around the x axis if required
+		! find the max & min y values of the points in the mod_surface polygon - then use the corresponding points
+		! to create a rotation transformation around the y axis
+		IF not matrotdone THEN
+		MyLogStr ('Calculating rotation about x-axis');
+		minp := mod_surface.plyPnt[1];
+			maxp := minp;
+			FOR i := 2 to mod_surface.plyNpnt DO
+				if mod_surface.plyPnt[i].y < minp.y then
+					minp := mod_surface.plyPnt[i];
+				end;
+				if mod_surface.plyPnt[i].y > maxp.y then
+					maxp := mod_surface.plyPnt[i];
+				end;
+			END;
+			MyLogStr ('Calculating angle');
+			tanang := (maxp.z - minp.z	)/(maxp.y - minp.y);
+			ang := atan(tanang);
+			LogStrAng ('Angle=', ang);
+			catrotate (mat, -ang, x);
+			MyLogStr ('rotation concatenated');
+		END;
+		
+		! apply the transformation to a point on the polygon to determine the 
+		! new z height
+		MyLogStr ('Calculating final z adjustment');
+		xformpt (surface.plyPnt[1], mat, mod_surface.plyPnt[1]);
+		! add an additional transformation to move to z height of zero
+		cattran (mat, 0.0, 0.0, -mod_surface.plypnt[1].z);
+		MyLogStr ('z adjustment concatenated');
+	end;
+	! now set up the sun angles as a vector and apply modmat to it ... this
+	! makes it easy to modify the sun position with the modelling matrix.
+	MyLogStr ('Calculating sun vector');
+	setpoint (sunvec[1], 0.0);
+	sphere_cart (1000.0, north+azimuth, altitude, sunvec[0].x, sunvec[0].y, sunvec[0].z);  ! Note: The radius of 1000 is just an arbitary number
+	xformpt (sunvec[0], mat, sunvec[0]);
+	xformpt (sunvec[1], mat, sunvec[1]);
+	
+	! now concatenate a rotation around the z axis so that the sun will cast shadows
+	! parallel to the x axis - this just means that subsequent shadow calcs can treat 
+	! the shadow casting as a simple 2d slope rather than have to worry about 3d calcs.
+	cart_sphere (sunvec[0].x-sunvec[1].x, sunvec[0].y-sunvec[1].y, sunvec[0].z-sunvec[1].z, 
+				 rad, planang, modaltitude);	! get the planang of the sun vector, also the modified altitude
+	catrotate (mat, -planang, z);
+	MyLogStr ('Sun angle concatenated');
+	
+	! Not sure how often this will happen in practice, but I think there is at least a technical possibility
+	! that (after all this twisting and turning) the sun may be below the surface plane.  We wouldn't
+	! really need to know if we were assured that all of the entities casting shadows were completely above
+	! the surface plane.  But we have no such assurance and subsequent processing will need to work out what
+	! is above and what is below the surface.  So, to make my visualisation easier, I'm going to check if the 
+	! sun is shining upwards or downwards with the current mat.  If it is upwards then I will append another
+	! 180 degree rotation about the x axis ...
+	IF sunvec[0].z < sunvec[1].z THEN
+		MyLogStr ('Sun below surface - flip whole thing by pi');
+		catrotate (mat, pi, x);
+	END;
+END GetModMat;
+
+
+PROCEDURE HighlightEnt (ent: IN OUT entity; show : boolean; surface : boolean);
+VAR
+	tempent		: entity;
+	i, j		: integer;
+	SvWgt		: boolean;
+	Svltype	: integer;
+	svclr		: integer;
+	svspc		: real;
+	loopmax	: integer;
+BEGIN
+	if isnil (ent.addr) then
+		return;
+	elsif surface and ((ent.enttype <> entply) or zplane) then
+		return ;
+	elsif not surface then
+		if not ((ent.enttype = entply and doply) or
+						(ent.enttype = entlin and doLin) or
+						(ent.enttype = entln3 and doLn3)) then
+			return;
+		end;
+	end;
+	SvWgt := showwgt;
+	showwgt := true;
+	svspc := ent.spacing;
+	Svltype := ent.ltype;
+	svclr := ent.color;
+	if show then
+		ent.width := ent.width+1;
+		ent_draw_dl (ent, drmode_black, false);
+		ent.ltype := ltype_dashed;
+		if surface then
+			ent.spacing := 22.0*pixsize;
+		else
+			ent.spacing := 13.0*pixsize;
+		end;
+		ent.color := clrltgray;
+		if ent.enttype = entply then
+			! In some views different edges of the polygon may overlap each other on the display (as
+			! would happen in a vertical polygon in plan view for example). In this case it is possible
+			! that the dashes in one overlapping line could fill in the spaces in the other line, and so
+			! the highlight does not display very well. To minimise this happening, we draw each edge 
+			! seperately and ensure that the lines are going in the same direction (not foolproof, but 
+			! reliable in the example of a vertical polygon in plan view, which is likely to be a 
+			! common scenario).
+			ent_init (tempent, entln3);
+			tempent.color := clrltgray;
+			tempent.spacing := ent.spacing;
+			tempent.width := ent.width;
+			if ent.plyNpnt <= 36 then
+				loopmax := ent.plyNpnt;
+			else
+				loopmax := 35;	!DataCAD 14 onwards can have polygons with more than 36 sides, but DCAL only supports up to 36.
+			end;
+			for i := 1 to loopmax do
+				if i=ent.plyNpnt then
+					j := 1;
+				else
+					j := i+1;
+				end;
+				if distance (origin, ent.plypnt[i]) < distance (origin, ent.plypnt[j]) then
+					tempent.ln3Pt1 := ent.plypnt[i];
+					tempent.ln3Pt2 := ent.plypnt[j];
+				else
+					tempent.ln3Pt1 := ent.plypnt[j];
+					tempent.ln3Pt2 := ent.plypnt[i];
+				end;
+				tempent.ltype := ltype_solid;
+				ent_draw_dl (tempent, drmode_black, false);
+				tempent.ltype := ltype_dashed;
+				ent_draw_dl (tempent, drmode_white, false);
+			end;
+		else
+			ent_draw_dl (ent, drmode_white, false);
+		end;
+	else
+		ent.width := ent.width+1;
+		ent_draw_dl (ent, drmode_black, false);
+		ent.width := ent.width-1;
+		ent_draw_dl (ent, drmode_white, false);
+		ent.width := ent.width+1;
+	end;
+	ent.width := ent.width-1;
+	ent.spacing := svspc;
+	ent.ltype := Svltype;
+	ent.color := svclr;
+	showwgt := SvWgt;
+END HighlightEnt;
+
+
+PROCEDURE HighlightSS (num : integer; show : boolean; surface : boolean);
+!!! Highlights entities by drawing them dashed grey. If show is false then
+!!! they are drawn in their original colour/line type.
+!!! If surface is true then highlight with a longer dash and with increased
+!!! line width.
+!!! num is Selection Set number.
+VAR
+	modess		: mode_type;
+	ent			: entity;
+	addrss		: entaddr;
+	i, j		: integer;
+	tempent		: entity;
+	temppnt		: point;
+BEGIN
+	if num< 0 or num>15 then
+		return;
+	end;
+	if sslength (num) = 0 then
+		return;
+	end;
+	mode_init (modess);
+	mode_ss (modess, num);
+	addrss := ent_first (modess);
+	WHILE ent_get (ent, addrss) DO
+		HighlightEnt (ent, show, surface);
+		addrss := ent_next (ent, modess);
+	END;
+END HighlightSS;
+
+FUNCTION PlyIsVertical (ply : entity) : boolean;
+VAR
+	btmleft, topright : point;
+	i : integer;
+	tempply	: entity;
+BEGIN
+	if ply.enttype <> entply then
+		return false;
+	end;
+	tempply := ply;
+	if ply.plynpnt > 36 then
+		tempply.plynpnt := 36;	! DataCAD 14 onward supports polygons with more than 36 sides, but DCAL only supports 36.
+	end;
+	ent_extent (tempply, btmleft, topright);
+	if (btmleft.x = topright.x) or (btmleft.y = topright.y) then
+		return true;		! is vertical (parallel to either x or y axis)
+	else
+		for i := 1 to tempply.plyNpnt do
+			if dis_from_line (btmleft, topright, tempply.plypnt[i]) > ABSZero then
+				return false;
+			end;
+		end;
+	end;
+	return true;
+END PlyIsVertical;
+
+PROCEDURE GetSurface;
+VAR
+	b			: boolean;
+	svsurface	: entity;
+	svzplane	: boolean;
+	svz				: real;
+	bl, tr	: point; 
+BEGIN
+	REPEAT
+		svsurface := surface;
+		svzplane := zplane;
+		svz := zheight;
+		wrtlvl ('Shadow Surface');
+		ReDraw; 	! remove any existing higlighted surface
+		if not zplane then
+			HighlightEnt (surface, true, true);
+		end;
+		lblsinit;
+		lblsett (1, 'Fixed Z', zplane);
+		tempstr := 'Cast shadows on an infinite horzontal plane';
+		if zplane then
+			strcat (tempstr, ' (z=');
+			cvdisst (zheight, str);
+			strcat (tempstr, str);
+			strcat (tempstr, ')');
+		end;
+		lblmsg (1, tempstr);
+		lblsett (3, 'Polygon', not zplane);
+		lblmsg (3, 'Select a polygon to define shadow surface');
+		if not zplane then
+			lblsett (4, 'Top Only', toponly);
+			lblmsg (4, 'Cast shadows on upper surface only of non-vertical polygons');
+		end;
+		lblset (20, 'Exit');
+		lblson;	
+		getesc (key);
+		IF key = s0 THEN
+			surface := svsurface;
+			vertical := PlyIsVertical(surface);
+			IF ss and not zplane THEN
+				HighlightEnt (surface, true, true);
+			END;
+			RETURN;
+		ELSIF key = f4 THEN
+			if not zplane then
+				toponly := not toponly;
+			end;
+		ELSIF key = f1 THEN
+			zplane := true;
+			lblsinit;
+			lblson;
+			wrtmsg ('Enter height of z plane: ');
+			getdis (zheight);
+			SaveBln ('ShadZedPlane',zplane, true);
+			SaveRl ('ShadZedHight', zheight, true);
+		ELSIF key = f3 THEN
+			REPEAT
+				HighlightEnt (surface, true, true);
+				lblsinit;
+				lblsett (4, 'Top Only', toponly);
+				lblmsg (4, 'Cast shadows on upper surface only of non-vertical polygons');
+				lblset (20, 'Exit');
+				lblson;
+				wrtmsg ('Select polygon to cast shadows onto');
+				res := getpoint (pt, key);
+				wrtmsg ('');
+				IF res = res_normal THEN
+					mode_init (mode);
+					IF lyrsearch THEN
+						mode_lyr (mode, lyr_on);
+					ELSE
+						mode_lyr (mode, lyr_curr);
+					END;
+					mode_enttype (mode, entply);
+					bres := ent_near (surface, pt.x, pt.y, mode, true);
+					IF bres THEN
+						if surface.plynpnt > 36 then
+							msg_ok ('Please select a surface polygon with 36 or less sides');
+							surface := svsurface;
+							zplane := svzplane;
+							zheight := svz;
+						else
+							zplane := false;
+							ReDraw;
+							HighlightEnt (surface, true, true);
+							! store the address of the surface as an attribute in the drawing
+							if atr_sysfind ('ShadSurface', atr) then
+								atr.lgladdr := lgl_addr(surface.addr);
+								atr_update (atr);
+								ss := true;
+							else
+								atr_init (atr, atr_addr);
+								atr.name := 'ShadSurface';
+								atr.lgladdr := lgl_addr(surface.addr);
+								atr_add2sys (atr);
+								ss := true;
+							end;
+						end;
+						vertical := PlyIsVertical(surface);
+						SaveBln ('ShadZedPlane',zplane, true);
+					ELSE
+						msg_OK ('Selected point too far from a suitable polygon');
+					END;
+				ELSIF res = res_escape THEN
+					IF key = s0 THEN
+						surface := svsurface;
+						vertical := PlyIsVertical(surface);
+					ELSIF key = f4 THEN
+						toponly := not toponly;
+					END;
+				END;
+			UNTIL (res=res_normal and bres) or (res = res_escape and key=s0);
+			if isnil (surface.addr) then
+				zplane := true;
+			end;
+		END;
+	UNTIL false;
+END GetSurface;
+
+PROCEDURE SelectEntTypes;
+VAR
+	key		: integer;
+	s			: str255;
+BEGIN
+	EncodeEntTyp (s);
+	repeat
+		lblsinit;
+		lblsett (1, '2D Line', doLin);
+		lblsett (3, '3D Line', doLn3);
+		lblsett (4, 'Polygon', doPly);
+		lblset (20, 'Exit');
+		getesc (key);
+		if key = f1 then
+			doLin := not doLin;
+		elsif key = f3 then
+			doLn3 := not doLn3;
+		elsif key = f4 then
+			doPly := not doPly;
+		end;
+		EncodeEntTyp (tempstr);
+		SaveStr ('ShadowEntTps', tempstr, true);
+		if key = s0 then
+			if entityss >= 0 and not strcomp (s, tempstr, -1) then
+				lblsinit;
+				lblson;
+				reDraw;
+				HighlightSS (entityss, true, false);
+			end;
+			return;
+		end;
+	until false;
+END SelectEntTypes;
+
+PROCEDURE UserSelectSS;
+VAR
+	i, key		: integer;
+	name		: string(16);
+	ssmode		: mode_type;
+	addr		: entaddr;
+	ent			: entity;
+BEGIN
+	ReDraw;
+	lblsinit;
+	lblson;
+	HighlightSS (entityss, true, false);
+	repeat
+		wrtlvl ('Shadow Entities');
+		lblsinit;
+		for i := 0 to 7 do
+			ssGetName (i, name);
+			lblsett (i+1, name, i=entityss);
+		end;
+		if entityss >= 0 then
+			lblset (12, 'Add To Set');
+			lblmsg (12, 'Add entities to selection set');
+			lblset (13, 'Del Frm Set');
+			lblmsg (13, 'Remove entities from selection set');
+			lblset (14, 'Clear Set');
+			lblmsg (14, 'Clear selection set');
+			lblset (15, 'Rename');
+			lblmsg (15, 'Rename Selection Set');
+			lblset (18, 'Ent Types');
+			tempstr := 'Select entity types to cast shadows (';
+			tempbln := false;
+			if doply then
+				strcat (tempstr, 'Ply,');
+				tempbln := true;
+			end;
+			if doLn3 then
+				strcat (tempstr, '3D Lin,');
+				tempbln := true;
+			end;
+			if doLin then
+				strcat (tempstr, '2D Lin,');
+				tempbln := true;
+			end;
+			if tempbln then
+				strdel (tempstr, strlen(tempstr), 1);
+			end;
+			strcat (tempstr, ')');
+			lblmsg (18, tempstr);
+		end;
+		lblset (20, 'Exit');
+		wrtmsg ('Choose Selection Set to use for Shadow Entities');
+		lblson;
+		getesc (key);
+		if key = s0 then
+			return;
+		elsif key >= f1 and key <= f8 then
+			key := key-f1;
+			if key=entityss then
+				HighlightSS (entityss, true, false);
+			else
+				HighlightSS (entityss, false, false);
+				entityss := key;
+				HighlightSS (entityss, true, false);
+			end;
+			SaveInt ('ShadEntSlSet', entityss, false);
+		elsif (key = s4) and (entityss >= 0) then
+			reDraw;
+			ssClear (entityss);
+		elsif (key = s5) and (entityss >= 0) then
+			lblsinit;
+			lblson;
+			ssGetName (entityss, tempstr);
+			strins (tempstr, 'Enter new name for \'', 1);
+			strcat (tempstr, '\':');
+			wrtmsg (tempstr);
+			ssGetName (entityss, tempstr);
+			getstr (tempstr, 8);
+			if not BlankString(tempstr) then
+				ssSetName (entityss, tempstr);
+			end;
+			wrtmsg('');
+		elsif (key = s2) and (entityss >= 0) then
+			lblsinit;
+			while getmode ('add to Selection Set', ssmode, key) = res_normal do
+				addr := ent_first (ssmode);
+				WHILE ent_get (ent, addr) DO
+					addr := ent_next (ent, ssmode);
+					if not ssMember (entityss, ent) then
+						ssAdd (entityss, ent);
+						HighlightEnt (ent, true, false);
+					end;
+				END;
+			end;
+		elsif (key = s3) and (entityss >= 0) then
+			lblsinit;
+			while getmode ('remove from Selection Set', ssmode, key) = res_normal do
+				addr := ent_first (ssmode);
+				WHILE ent_get (ent, addr) DO
+					addr := ent_next (ent, ssmode);
+          if ssDel (entityss, ent) then
+             HighlightEnt (ent, false, false);
+           end;
+ 				END;
+			end;
+		elsif (key = s8) then
+			SelectEntTypes;
+		end;
+	until false;
+END UserSelectSS;
+
+
+
+PROCEDURE SetShadSymbolName (symname : IN OUT symstr);
+!!! Create a suitable name for the symbol. Make the name as informative as possible so that useful information is 
+!!! displayed if it is identified in DataCAD.  Also include date/time of creation to ensure name of each shadow is
+!!! unique. Name will be in one of the following 2 formats (the first format is used if the sun position is named 
+!!! [i.e. if it has an associated sunposmsg], otherwise the second format is used):
+!!!     SHADOW sunposmsg_______________  Created:yyyymmdd hh:mm:ss
+!!!     SHADOW Az:359-59-59 Al:359-59-59  Created:yyyymmdd hh:mm:ss
+
+VAR
+	str				: str255;
+
+BEGIN
+	symname := 'SHADOW ';
+	if strlen(sunposmsg) > 0 then
+		strcat (symname, sunposmsg);
+	else
+		strcat (symname, 'Az:');
+		cvangst (azimuth, str);
+		strcat (symname, str);
+		strcat (symname, ' Al:');
+		cvangst (altitude, str);
+		strcat (symname, str);
+	end;
+	strcat (symname, '  Created:');
+	AppendDateTimeStamp (symname, true, true, true, true);
+	RemoveChars (symname, '"\'');	! Remove single and double quote characters which may be in the string as a result of the cvangst calls.
+																! (if left in the symbol name these characters will cause the DataCAD drawing to crash)
+END SetShadSymbolName;
+
+
+FUNCTION CreateShadLn3 (p1, p2 : point; shad : IN OUT entity) : boolean;
+BEGIN
+	MyLogStr ('Creating ln3 shadow');
+	if PntsEqual (p1, p2, 0.1) then
+		! do not create really small lines ...
+		MyLogStr ('Really short line ignored');
+		return false;
+	end;
+	ent_init (shad, entln3);
+	shad.ln3pt1 := p1;
+	shad.ln3pt2 := p2;
+	ent_add (shad);
+	if colour >= 0 or colour < -1000 then
+		shad.color := entclr;
+		ent_update (shad);
+	end;
+	MyLogStr ('ln3 shadow completed');
+	return true;
+END CreateShadLn3;
+
+FUNCTION CreateTrimmedLn3 (p1, p2 : point; 
+													 Surf : array of point; Surfnpnt : integer;
+													 ShadEnt : IN OUT entity) : integer;
+!!! returns 0 when a shadow is created
+!!! returns -1 when no shadow is ceated
+VAR
+	pnts			: pntarr;
+	npnts			: integer;
+	i, j			: integer;
+	pnt				: point;
+	result		: integer;
+BEGIN
+	MyLogStr ('Creating trimmed ln3 shadow');
+	pnts[1] := p1;
+	npnts := 1;
+	for i := 1 to Surfnpnt do
+		j := i+1;
+		if j > Surfnpnt then
+			j := 1;
+		end;
+		if intr_linlin (p1, p2, Surf[i], Surf[j], pnts[npnts+1], true) then
+			if not pntsequal (p1, pnts[npnts+1], ABSZero) or pntsequal (p1, pnts[npnts+1], ABSZero) then
+				npnts := npnts+1;
+				MyLogStr ('Intersection with surface found');
+			end;
+		end;
+	end;
+	npnts := npnts+1;
+	pnts[npnts] := p2;
+	if npnts > 2 then
+		sortpnts (pnts, npnts, true);
+	end;
+	MyLogStr ('Intersections found and sorted');
+	result := -1;
+	if npnts < 2 then
+		return result;
+	end;
+	for i := 1 to npnts-1 do
+		! check if midpoint of line segment is inside surf - if so then add line segment
+		j := i+1;
+		pnt.x := pnts[i].x + (pnts[j].x - pnts[i].x)/2.0;
+		pnt.y := pnts[i].y + (pnts[j].y - pnts[i].y)/2.0;
+		pnt.z := pnts[i].z + (pnts[j].z - pnts[i].z)/2.0;
+		if PntInPly (pnt, Surf, Surfnpnt) >= 0 then
+			MyLogStr ('Creating shadow line');
+			if CreateShadLn3 (pnts[i], pnts[j], ShadEnt) then
+				result := 0;
+				MyLogStr ('Shadow line created');
+			end;
+		end;
+	end;
+	LogStrint ('ln3 processing completed: ', result);
+	return result;
+END CreateTrimmedLn3;
+
+
+PROCEDURE CreateShadPln (pnts : array of point; npnt : integer; shad : IN OUT entity; isVoid : boolean);
+VAR
+	shadpv			: polyvert;
+	i						: integer;
+	adr					: entaddr;
+	ent					: entity;
+	mode				: mode_type;
+
+BEGIN
+	if npnt < 3 then
+		MyLogStr ('Ply with less than 3 sides rejected for processing');
+		return;
+	end;
+	! create a polyline entity with these points
+	LogStrint ('Creating pln with points : ', npnt);
+	ent_init (shad, entPln);
+	shad.plnbase := 0.0;
+	shad.plnhite := 0.0;
+	shad.plnclose := true;
+	if colour >= 0 or colour < -1000 then
+		shad.color := entclr;
+	end;
+	if DC191 and (not isvoid) then
+		PlinCovered(shad, true);
+	end;
+	MyLogStr ('About to add pln to drawing');
+	ent_add (shad);
+	MyLogStr ('pln added, about to add points to it');
+	for i := 1 to npnt do
+		polyvert_init (shadpv);
+		shadpv.shape := pv_vert;
+		shadpv.pnt := pnts[i];
+		polyvert_add (shadpv, shad.plnfrst, shad.plnlast);
+		if colour >= 0 or colour < -1000 then
+			shad.color := entclr;
+		end;
+		ent_update (shad);
+	end;
+	MyLogStr ('pln points added ok');
+
+	if hatchlines = 5 then
+		MyLogStr ('Pressing solid fill');
+		if isvoid and DC191 then
+			! find the entity that the void will effect
+			MyLogStr ('Finding master shadow pln for void pln');
+			mode_init (mode);
+			mode_ss (mode, ssNum);
+			adr := ent_first (mode);
+			WHILE ent_get (ent, adr) DO
+				if ent.enttype = entpln then
+					if PntInPln (pnts[1], ent) = 1 then 
+						MyLogStr ('Master pln found');
+						PlinVoidAdd(ent, shad, false);
+						MyLogStr ('Void added to master pln');
+            ent_draw_dl (ent, drmode_black, true);
+!            ent_draw_dl (shad, drmode_black, true);
+					end;
+					adr := ent_next (ent, mode);
+				end;
+			END;
+		elsif not isvoid then
+			SolidFill (shad, shad.color);
+		end;
+	end;
+	if (not isvoid) or (hatchlines <> 5) then
+		ssAdd (ssNum, shad);
+	end;
+
+	MyLogStr ('pln added, calculating extents');
+	if extent1 then
+		ent_extent (shad, hmin, hmax);
+		extent1 := false;
+	else
+		ent_extent (shad, hmin1, hmax1);
+		hmin.x := min (hmin.x, hmin1.x);
+		hmin.y := min (hmin.y, hmin1.y);
+		hmin.z := min (hmin.z, hmin1.z);
+		hmax.x := max (hmax1.x, hmax.x);
+		hmax.y := max (hmax1.y, hmax.y);
+		hmax.z := max (hmax1.z, hmax.z);
+	end;
+	MyLogStr ('Extent calculation complete');
+END CreateShadPln;
+
+FUNCTION CreateTrimmedPln (Shad : array of point; Shadnpnt : integer;
+													 Surf : array of point; Surfnpnt : integer;
+													 ShadEnt : IN OUT entity;
+													 isVoid	: boolean) : integer;
+!!! returns 1 when the shadow covers the whole surface
+!!! returns 0 when the shadow covers part of the surface
+!!! returns -1 when no shadow is cast on the surface
+TYPE
+	Side = RECORD
+					p1			: point;
+					p2			: point;
+					used		: boolean;
+				 END;
+VAR
+	sides			: array [1..250] of Side;
+	nsides		: integer;
+	i, j			: integer;
+	m, n			: integer;
+	sidepnts	: pntarr;
+	nsidepnts	: integer;
+	nintersect: integer;
+	pnt				: point;
+	pnts			: array [1..250] of point;
+	npnts			: integer;
+	next		: integer;
+	match			: boolean;
+	tempent		: entity;
+	iterations	: integer;
+	delta			: real;
+	mode			: mode_type;
+	adr				: entaddr;
+	ent				: entity;
+	pv				: polyvert;
+	pt				: point;
+
+FUNCTION GetNextSide : boolean;
+VAR
+	SvNext : integer;
+BEGIN
+	MyLogStr ('Getting Next Side');
+	if nsides < 2 then
+		return false;
+	end;
+	SvNext := next;
+	REPEAT
+		next := next+1;
+		if next > nsides then
+			next := 1;
+		end;
+	UNTIL (not sides[next].used) or (next = svnext);
+	if sides[next].used then
+		MyLogStr ('No sides left');
+	else
+		MyLogStr ('Side found');
+	end;
+	return (not sides[next].used);
+END GetNextSide;
+
+
+BEGIN
+	! set up sides based on Shad with any parts outside Surf removed
+	MyLogStr ('Setting up sides');
+	nintersect := 0;
+	nsides := 0;
+	for i := 1 to Shadnpnt do
+		j := i+1;
+		if j > Shadnpnt then
+			j := 1;
+		end;
+
+		nsidepnts := 1;
+		sidepnts[nsidepnts] := Shad[i];
+		for m := 1 to Surfnpnt  do
+			n := m+1;
+			if n > Surfnpnt then
+				n := 1;
+			end;
+			if intr_linlin (Shad[i], Shad[j], Surf[m], Surf[n], sidepnts[nsidepnts+1], true) then
+				if (not PntsEqual (sidepnts[nsidepnts+1], Shad[j], ABSZero)) and (not PntsEqual (sidepnts[nsidepnts+1], Shad[i], ABSZero)) then
+					nsidepnts := nsidepnts+1;
+				end;
+				nintersect := nintersect+1;
+			end;
+		end;
+		nsidepnts := nsidepnts+1; 
+		sidepnts[nsidepnts] := Shad[j];
+		LogStrInt ('Num side points = ', nsidepnts);
+
+		if nsidepnts > 3 then
+			SortPnts (sidepnts, nsidepnts, true);
+		end;
+		! add sides, but only if inside surf
+		MyLogStr ('Testing side points for being inside surface polygon');
+		for m := 1 to nsidepnts-1 do
+			pnt := sidepnts[m];
+			pnt.x := pnt.x + (sidepnts[m+1].x - sidepnts[m].x)/2.0;
+			pnt.y := pnt.y + (sidepnts[m+1].y - sidepnts[m].y)/2.0;
+			if PntInPly (pnt, Surf, Surfnpnt) >= 0 then
+				nsides := nsides+1;
+				sides[nsides].p1 := sidepnts[m];
+				sides[nsides].p2 := sidepnts[m+1];
+				sides[nsides].used := false;
+			end;
+		end;
+	end;
+
+	if nintersect = 0 then
+		MyLogStr ('No intersections between surface and shadow outline');
+		! there is no intersection between the shadow and the surface. There are
+		! 3 possibilities as below:
+		if PntInPly (shad[1], Surf, Surfnpnt) = 1 then
+			! shad is completely contained in surf - add shad unaltered
+			MyLogStr ('Shadow completely within surface outline');
+			CreateShadPln (Shad, shadnpnt, ShadEnt, isVoid);
+			return 0;
+		elsif PntInPly (Surf[1], Shad, Shadnpnt) = 1 then
+			if isVoid then
+			MyLogStr ('Shadow surface completely within void outline');
+				! Surf is completely contained in the void - remove shadow cast by parent entity
+				mode_init (mode);
+				mode_ss (mode, ssNum);
+				adr := ent_first (mode);
+				WHILE ent_get (ent, adr) DO
+					if ent.enttype = entpln then
+						if polyvert_get (pv, ent.plnfrst, ent.plnfrst, ent.plnlast) then 	
+							xformpt (pv.pnt, mat, pt);
+							if pntsequal (pv.pnt, surf[1], ABSZero) then
+								ent_del (ent);
+							end;
+						end;
+					end;
+					adr := ent_next (ent, mode);
+				END;
+			else
+				MyLogStr ('Shadow surface completely within shadow outline');
+				! Surf is completely contained in Shad - add Surf as Shad
+				CreateShadPln (Surf, Surfnpnt, ShadEnt, isVoid);
+				return 1;
+			end;
+		else
+			! no shadow is cast on surface
+			MyLogStr ('No shadow cast on surface');
+			return -1;
+		end;
+	end;
+	! set up sides based on Surf with any parts outside Shad removed
+	MyLogStr ('Setting up surface sides');
+	for i := 1 to Surfnpnt do
+		j := i+1;
+		if j > Surfnpnt then
+			j := 1;
+		end;
+		nsidepnts := 1;
+		sidepnts[nsidepnts] := Surf[i];
+		for m := 1 to Shadnpnt  do
+			n := m+1;
+			if n > Shadnpnt then
+				n := 1;
+			end;
+			if intr_linlin (Surf[i], Surf[j], Shad[m], Shad[n], sidepnts[nsidepnts+1], true) then
+				if (not PntsEqual (sidepnts[nsidepnts+1], Surf[i], ABSZero)) and (not PntsEqual (sidepnts[nsidepnts+1], Surf[j], ABSZero)) then
+					nsidepnts := nsidepnts+1;
+				end;
+			end;
+		end;
+
+		nsidepnts := nsidepnts+1;
+		sidepnts[nsidepnts] := Surf[j];
+		if nsidepnts > 3 then
+			SortPnts (sidepnts, nsidepnts, true);
+		end;
+
+		! add sides, but only if inside Shad
+		for m := 1 to nsidepnts-1 do
+			pnt := sidepnts[m];
+			pnt.x := pnt.x + (sidepnts[m+1].x - sidepnts[m].x)/2.0;
+			pnt.y := pnt.y + (sidepnts[m+1].y - sidepnts[m].y)/2.0;
+			if PntInPly (pnt, Shad, Shadnpnt) >= 0 then
+				nsides := nsides+1;
+				sides[nsides].p1 := sidepnts[m];
+				sides[nsides].p2 := sidepnts[m+1];
+				sides[nsides].used:= false;
+			end;
+		end;
+	end;
+
+	! CREATE POLYLINE(s) BASED ON THE LINES IN SIDES ARRAY
+	MyLogStr ('Starting polyline creation');
+	if nsides < 2 then
+		return -1;
+	end;
+	pnts[1] := sides[1].p1;
+	pnts[2] := sides[1].p2;
+	sides[1].used := true;
+	npnts := 2;
+	next:= 2;
+	iterations := 0;
+	delta := ABSZero;
+
+	REPEAT
+		iterations := iterations+1;
+		match := false;
+		if next > nsides or sides[next].used then
+			! check if any unused sides left ... if not then we are done
+			if not GetNextSide then
+				return 0;
+			end;
+		end;
+
+		if PntsEqual(sides[next].p1, pnts[npnts], delta) then
+			match := true;
+		elsif PntsEqual (sides[next].p2, pnts[npnts], delta) then
+			SwapPnts (sides[next].p1, sides[next].p2);		! surface sides could be going opposite direction to shadow sides
+			match := true;
+		end;
+
+		if match then
+			sides[next].used := true;
+			if PntsEqual(Pnts[1], sides[next].p2, delta) then
+				CreateShadPln (pnts, npnts, ShadEnt, isVoid);
+				if not GetNextSide then
+					return 1;
+				else 
+					Pnts[1] := sides[next].p1;
+					Pnts[2] := sides[next].p2;
+					nPnts := 2;
+				end;
+			else
+				npnts := npnts+1;
+				pnts[npnts] := sides[next].p2;
+			end;
+		end;
+		if iterations > 249 then
+		MyLogStr ('250 iterations and still not done ... increasing delta to 0.01');
+		delta := 0.01;	! try a bigger delta if excessive iterations (should never happen??)
+		end;
+	until not GetNextSide or iterations > 449;
+	LogStrint ('Iterations completed: ', iterations);
+	
+	if iterations > 449 then
+		! display shadow lines temporarily, but do not save anything to drawing file
+		for i := 1 to nsides do
+			ent_init (tempent, entlin);
+			xformpt (sides[i].p1, invmat, tempent.linpt1);
+			xformpt (sides[i].p2, invmat, tempent.linpt2);
+			tempent.color := clryellow;
+			ent_draw_dl (tempent, drmode_white, true);
+		end;
+		DisplayVerboseMsg (1, '');
+		return -1;
+	end;
+	return 1;		! shouldn't actually ever get here ...
+END CreateTrimmedPln;
+
+
+PROCEDURE GenShadows;
+VAR
+	addr, v_addr	: entaddr;
+	ent, v_ent		: entity;
+	mod_altitude	: real;
+	tan_altitude	: real;
+	det				: real;
+	b				: boolean;
+	i, j, k			: integer;
+	shadow, v_shad	: entity;
+	points			: array [1..100] of point;
+	npoints			: integer;
+	shad_mode		: mode_type;
+	sym				: symbol;
+	ref				: point;
+	ratio			: real;
+	zpnt			: point;
+	shadmode		: mode_type;
+	symname			: symstr;
+	str				: str255;
+	shadowcreated	: integer;
+	entmode		: mode_type;
+	sl        : scanLineType;
+	tempent		: entity;
+	entnum		: integer;
+	VoidsDone	: boolean;
+	bigply		: boolean;
+
+	FUNCTION Cast (castent : IN entity; shad : IN OUT entity; isvoid : boolean) : boolean;
+	!!! calculates shadow for ent and returns the shadow in shad. 
+	!!! If the shadow is trimmed to a polygon, then it is possible that more than 1 shadow
+	!!! polyline will be created. In this case shad is the most recently created polyline.
+	!!! Returns false if no shadow cast on the shadow polygon (otherwise returns true).
+	VAR
+		below		: boolean;	! flag used to indicate if any points are below the surface plane
+		abovepnt	: integer;	! index of the first point that is above the surface
+		surfacepnts : pntarr;
+		temppnt		: point;
+		tempent		: entity;
+	BEGIN
+		! do not cast a shadow for the surface in case it is in the entity set
+		if castent.addr = shadow.addr then
+			MyLogStr ('Skipping surface polygon');
+			return false;
+		end;
+
+		! do not cast a shadow for the surface if the sun is below it and toponly flag is true
+		if toponly and not vertical then
+			MyLogStr ('Checking for underside shadow');
+			temppnt := surface.plypnt[1];
+			temppnt.z := temppnt.z + 100.0;		! set up temppnt to be above the surface
+			xformpt (temppnt, mat, temppnt);
+			if temppnt.z < 0.0 then
+				MyLogStr ('Shadow was on underside or polygon');
+				return false;		! if xformed temppnt.z is < zero then sun is shining on the underside of the polygon.
+			end;
+			MyLogStr ('Shadow was not on underside');
+		end;
+		
+		tempent := castent;
+		if tempent.enttype = entply and tempent.plynpnt > 36 then
+			tempent.plynpnt := 36;	! DataCAD 14 onwards supports polygons with > 36 sides, but DCAL only supports 36
+			bigply := true;
+		end;
+		
+		!set up points as being the points of tempent with the modelling matrix applied
+		below := false;
+		MyLogStr ('Checking for entity points below surface');
+		if tempent.enttype = entply or tempent.enttype = entplyvd then
+			npoints := tempent.plyNpnt;
+			abovepnt := 0;
+			for i := 1 to npoints do
+				xformpt (tempent.plyPnt[i], mat, points[i]);
+			end;
+		elsif tempent.enttype = entlin then
+			if realequal (tempent.linpt1.z, tempent.linpt2.z, ABSZero) then
+			! treat line as a 3D line
+			npoints := 2;
+				xformpt (tempent.linpt1, mat, points[1]);
+				xformpt (tempent.linpt2, mat, points[2]);
+			else
+				! treat line as a vertical polygon
+				npoints := 4;
+				xformpt (tempent.linpt1, mat, points[1]);
+				points[2] := tempent.linpt1;
+				points[2].z := tempent.linpt2.z;
+				xformpt (points[2], mat, points[2]);
+				xformpt (tempent.linpt2, mat, points[3]);
+				points[4] := tempent.linpt2;
+				points[4].z := tempent.linpt1.z;
+				xformpt (points[4], mat, points[4]);
+			end;
+		elsif tempent.enttype = entln3 then
+			npoints := 2;
+			xformpt (tempent.ln3Pt1, mat, points[1]);
+			xformpt (tempent.ln3Pt2, mat, points[2]);
+		end;
+
+		for i := 1 to npoints do
+			if points[i].z < 0.0 then
+				below := true;
+			elsif abovepnt=0 then
+				abovepnt := i;
+			end;
+		end;
+
+		if abovepnt = 0 then	! no points found that were above the surface
+			MyLogStr ('Entire entity was below surface.');
+			npoints := 0;
+			return false;
+		end;
+
+		if below then
+			MyLogStr ('Part entity below surface. Identifying points and intersections with surface');
+			i := 1;
+			while (i <= npoints and tempent.enttype <> entln3)  or (tempent.enttype = entln3 and i < npoints) do
+				j := i+1;
+				if j > npoints then
+					j := 1;
+				end;
+				if ((points[i].z < 0.0) and (points[j].z > 0.0)) or ((points[i].z > 0.0) and (points[j].z < 0.0)) then
+					! the side between these 2 points crosses z zero, so work out the point where this occurs
+					ratio := points[i].z/(points[i].z - points[j].z);
+					zpnt.x := points[i].x - (points[i].x - points[j].x)*ratio;
+					zpnt.y := points[i].y - (points[i].y - points[j].y)*ratio;
+					zpnt.z := 0.0;
+					! insert this point into the array
+					if j=1 then
+						npoints := npoints+1;
+						points[npoints] := zpnt;
+					else
+						for k := npoints to j by -1 do
+							points[k+1] := points[k];
+						end;
+						npoints := npoints+1;
+						points[j] := zpnt;
+					end;
+					i := i+1;
+				end;
+				i := i+1;
+			end;
+			MyLogStr ('Finished identifying points below surface. Removing appropriate points');
+
+			! remove all the points in the array that are below the surface
+			i:=1;
+			while i <= npoints do
+				if points[i].z < 0.0 then
+					if j = npoints then 
+						npoints := npoints-1;
+					else
+						for j := i+1 to npoints do
+							points[j-1] := points[j];
+						end;
+						npoints := npoints-1;
+					end;
+				else
+					i := i+1;
+				end;
+			end;
+		end;
+
+		! cast the point so shadow at z zero.
+		MyLogStr ('Casting points to zero');
+		for i := 1 to npoints do
+			points[i].x := points[i].x - points[i].z/tan_altitude;		! calculate shadow x based on z hight and modified sun altitude. 
+			points[i].z := 0.0;
+		end;
+
+		! Apply matrix to surface points
+		MyLogStr ('Applying matrix to surface');
+		for i := 1 to surface.plynpnt do
+			xformpt (surface.plyPnt[i], mat, surfacepnts[i]);
+		end;
+
+		! create polyline entity(s) with these points
+		if trim and (not zplane) then
+			if (tempent.enttype = entln3) or (tempent.enttype = entlin and npoints=2) then
+				MyLogStr ('Creating trimmed ln3 shadow');
+				if CreateTrimmedLn3 (points[1], points[2], surfacepnts, surface.plynpnt, shad) = -1 then
+					MyLogStr ('No Shadow for this ln3');
+					return false;
+				end;
+				MyLogStr ('ln3 shadow created');
+			else
+				MyLogStr ('Creating trimmed ply shadow');
+				if CreateTrimmedPln (points, npoints, surfacepnts, surface.plynpnt, shad, isvoid) = -1 then
+					MyLogStr ('No shadow for this ply');
+					return false;
+				end;
+				MyLogStr ('ply shadow created');
+			end;
+		elsif (tempent.enttype = entln3) or (tempent.enttype = entlin and npoints=2) then
+			MyLogStr ('Creating ln3 shadow');
+			return CreateShadLn3 (points[1], points[2], shad);
+		else
+			MyLogStr ('Creating ply shadow');
+			CreateShadPln (points, npoints, shad, isvoid);
+			MyLogStr ('ply shadow created');
+		end;
+
+		MyLogStr ('Exiting Cast Procedure');
+		return true;
+	END Cast;
+	
+BEGIN
+	if (entityss < 0) then
+		msg_OK ('Entities to create shadows for have not been selected');
+		return;
+	elsif (not zplane) and not ss then
+		msg_OK ('Please select a shadow surface');	! I don't think this can ever happen, but just in case ...
+		return;
+	elsif not (doPly or doLin or doLn3) then
+		DisplayVerboseMsg (2, '');
+		return;
+	end;
+	
+	OpenLog;
+
+	MyLogStr ('Start Shadow Processing');
+	
+	! if we get here then it looks like we are ready to cast shadows
+	wrterr ('Processing shadows ... please wait');
+	if showprogress then
+		wrtmsg ('Calculating surface and sun position');
+	end;
+	! call GetModMat to create a modelling matrix that will rotate everything so that
+	! the surface is level at a z height of zero - this just makes subsequent calculations
+	!  that much easier ...
+	GetModMat (mat, mod_altitude);
+	! ... and we will need the inverse of mat to put shadows back to their correct positions 
+	! after creating them
+	b := invert (mat, invmat, det);
+	MyLogStr ('matrix inverted');
+	if not b then
+		msg_OK ('Sorry: an unexpected error has occurred');
+		MyLogStr ('UNEXPECED ERROR IN MATRIX INVERSION');
+		CloseLog;
+		return;
+	end;
+	if RealEqual (mod_altitude, 0.0, 0.001) or RealEqual (mod_altitude, pi, 0.001) then
+		msg_OK ('Cannot cast Shadows\r(Suns rays are parallel to surface)');
+		MyLogStr ('SUN PARALLEL TO SURFACE');
+		CloseLog;
+		return;
+	end;
+	tan_altitude := tan (mod_altitude);
+
+	svlyr := getlyrcurr;
+	if strlen(lyrname) > 0 then
+		MyLogStr ('Setting Layer');
+		lyr_set (lyr);
+	else
+		lyr := svlyr;
+	end;
+
+	! now step through the entities and create a shadow entity for each
+	stopgroup;	! start a new group for the shadow entities
+	shadowcreated := 0;
+	mode_init (entmode);
+	mode_ss (entmode, entityss);
+	addr := ent_first (entmode);
+	entnum := 0;
+	VoidsDone := false;
+	bigply := false;
+	WHILE ent_get (ent, addr) and shadowcreated < 32750 DO
+		IF (ent.addr <> surface.addr) and 
+			 (((ent.enttype = entply) and doPly) or 
+			  ((ent.enttype = entlin) and doLin) or 
+				((ent.enttype = entln3) and doLn3))THEN
+			entnum := entnum+1;
+			IF showprogress THEN
+				cvintst (entnum, str);
+				strins (str, 'Processing entity ', 1);
+				wrtmsg (str);
+			END;
+			extent1 := true;
+			LogStrint ('Processing Entity ', entnum);
+
+			if colour > 0 then
+				entclr := colour;
+			else
+				entclr := ent.color;
+			end;
+
+			ssClear (ssNum);
+			IF Cast (ent, shadow, false) THEN
+				MyLogStr ('Shadow cast ok');
+				shadowcreated := shadowcreated+1;
+				if ent.enttype = entply and (DC191 or hatchlines<>5)  then
+					! process any voids
+					v_addr := ent.plyfrstvoid;
+					WHILE void_get (v_ent, v_addr) DO
+						MyLogStr ('Processing void');
+						VoidsDone := true;
+						b := Cast (v_ent, v_shad, true);
+						v_addr := v_ent.next;
+					END;
+				end;
+			END;
+
+			! Add Hatch
+			if hatchlines > 0 and hatchlines < 4 then
+				mode_init (mode);
+				mode_ss (mode, ssNum);
+				mode_enttype (mode, entpln);
+				for i := 1 to hatchlines do
+					sl.ang := hatchang + float(i-1) * pi / float(hatchlines);
+					setpoint (sl.origin, 0.0);
+					sl.delta.x := 0.0;
+					sl.delta.y := hatchspace;
+					sl.numdash := 0;
+					j := 0;
+					hatch_mode (mode, sl, 0.0, 0.0, origin, 0.0, 1.0, htype_normal, lyr, hmin, hmax, false, j, false);
+				end;
+			end;
+			ssClear (ssNum);
+
+		END;
+		addr := ent_next (ent, entmode);
+	END;
+
+	if shadowcreated > 0 then
+		! update hatch entities
+		if hatchlines > 0 and hatchlines < 5 then
+			mode_init (mode);
+			mode_group (mode, shadow);
+			mode_enttype (mode, entlin);
+			addr := ent_first (mode);
+			while ent_get (ent, addr) do
+				ent.attr := 1;
+				if hatchclr >= 0 then
+					ent.color := hatchclr;
+				else
+					ent.color:= shadow.color;
+				end;
+				ent_update (ent);
+				ent_draw (ent, drmode_black);
+				addr := ent_next (ent, mode);
+			end;
+		end;
+
+		stopgroup;	! stop the group for shadow entites
+
+		! create a symbol to contain all the shadows that are currently transformed by mat
+		! (the symbol itself will be rotated back into position using invmat once it is inserted)
+		SetShadSymbolName (symname);
+		mode_init (shadmode);
+		mode_group (shadmode, shadow);
+		if showprogress then
+			wrtmsg ('Creating Symbol');
+		end;
+		MyLogStr ('Creating symbol:');
+		MyLogStr (symname);
+		setpoint (ref, 0.0);
+		sym_create (sym, shadmode, ref, symname, true, true);
+		MyLogStr ('Symbol created, creating symbol entity');
+		ent_init (shadow, entsym);
+		shadow.symname := symname;
+		shadow.symmod := invmat;
+		ent_add (shadow);
+		ent_draw (shadow, drmode_white);
+		MyLogStr ('symbol entity created');
+		cvintst (shadowcreated, str);
+		strins (str, 'Shadows created for ', 1);
+
+		if shadowcreated = 1 then
+			strcat (str, ' entity.');
+		else
+			strcat (str, ' entities.');
+			if shadowcreated >= 32750 then
+				msg_ok ('Shadow creation limit of 32,750\rentities was reached.');
+			end;
+		end;
+		wrterr (str);
+	else
+		wrterr ('');
+		msg_OK ('No shadows cast on this surface by entity(s)');
+	end;
+	if voidregen and DC191 and VoidsDone then
+    regen;    ! the new polyline void builtin procedure can leave underiable artifacts on the screen
+	end;
+	if bigply then
+		msg_OK ('Polygon with more than 36 sides was processed - shadow may not be correct');
+	end;
+	lyr_set (svlyr);
+
+	CloseLog;
+
+END GenShadows;
+
+PROCEDURE GetSpecColour;
+BEGIN
+	colour := absi(colour);
+	if colour > 1000 then
+		colour := colour - 1000;
+	end;
+	repeat
+		getclr (colour);
+		wrterr ('');
+	until colour > 0 and colour < 256;
+	SaveInt ('ShadColour', colour, true);
+END GetSpecColour;
+
+PROCEDURE GetShadowLyr;
+BEGIN
+	if strlen(lyrname) > 0 then
+		lyrname := '';
+		return;
+	end;
+	lblsinit;
+	lblson;
+	wrtmsg ('Enter layer to create shadows on: ');
+	if DC190 then
+		getstr (lyrname, 80);
+	else
+		getstr (lyrname, 8);
+	end;
+	if blankstring(lyrname) then
+		lyrname := '';
+		return;
+	end;
+	if not lyr_find (lyrname, lyr) then
+		if not Lyr_Create19 (lyrname, lyr, DC190) then
+			msg_OK ('Unable to find or create layer');
+			lyrname := '';
+		end;
+	end;
+END GetShadowLyr;
+
+PROCEDURE HatchSettings;
+BEGIN
+	repeat
+		SaveInt ('ShadHatchClr', hatchclr, true);
+		lblsinit;
+		wrtlvl ('Hatch Settings');
+		lblsett (1, 'No Hatch', hatchlines = 0);
+		lblmsg (1, 'Shadows will not be hatched');
+		lblsett (2, 'Single Line', hatchlines = 1);
+		lblmsg (2, 'Hatch with a single set of parallel lines');
+		lblsett (3, 'Cross Hatch', hatchlines = 2);
+		lblmsg (3, 'Hatch with 2 sets of parallel lines at right angles to each other');
+		lblsett (4, 'Net3', hatchlines = 3);
+		lblmsg (4, 'Hatch with 3 sets of parallel lines at 60 degrees to each other');
+		lblsett (6, 'Solid Fill', hatchlines = 5);
+		lblmsg (6, 'Fill shadows with solid fill (same colour as outline)');
+		if hatchlines > 0 and hatchlines < 5 then
+			lblsett (9, 'Outln Clr', hatchclr < 0);
+			lblmsg (9, 'Hatch the same colour as the shadow outlines');
+			lblsett (10, 'Set Clr', hatchclr >= 0);
+			if hatchclr >= 0 then
+				GetClrName (hatchclr, tempstr);
+				strins (tempstr, 'Set hatch colour (', 1);
+				strcat (tempstr, ')');
+			else
+				tempstr := 'Set hatch colour';
+			end;
+			lblmsg (10, tempstr);
+
+			lblset (12, 'Spacing');
+			cvdisst (hatchspace, tempstr);
+			strins (tempstr, 'Set spacing between hatch lines (', 1);
+			strcat (tempstr, ')');
+			lblmsg (12, tempstr);
+			lblset (13, 'Angle');
+			cvangst (hatchang, tempstr);
+			strins (tempstr, 'Hatch angle relative to suns rays (', 1);
+			strcat (tempstr, ')');
+			lblmsg (13, tempstr);
+		end;
+		lblset (20, 'Exit');
+		lblson;
+		
+		getesc (key);
+		if (key >= f1)and (key <= F6) and (key <> f5) then
+			hatchlines := key-f1;
+			SaveInt ('ShadHtchLins', hatchlines, true);
+		elsif key = s0 then
+			return;
+		elsif hatchlines > 0 then
+			if key = f9 then
+				hatchclr := -absi(hatchclr);
+			elsif key = f0 then
+				hatchclr := absi(hatchclr);
+				getclr (hatchclr);
+			elsif (hatchlines < 4) then
+				if (key = s2) then
+					wrtmsg ('Enter hatch spacing: ');
+					getdis (hatchspace);
+					wrtmsg ('');
+					SaveRl ('ShadHtchSpcg', hatchspace, true);
+				elsif key = s3 then
+					wrtmsg ('Enter hatch angle (relative to suns rays): ');
+					getang (hatchang);
+					wrtmsg ('');
+					SaveRl ('ShadHtchAngl', hatchang, true);
+				end;
+			end;
+		end;
+	until false;
+END HatchSettings;
+
+PROCEDURE Initialise;
+VAR
+	i	: integer;
+	r	: real;
+	s : str80;
+BEGIN
+	namever :='Shadow v1.0   Copyright D Henderson 2017.';
+
+	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
+	showprogress := false; ! disabled as update of progress display was unreliable, even though processing was proceeding ok
+	
+	initSettings ('Shadow.ini');
+	InitLog ('Shadow');
+
+	north := GetSvdAng ('ShadowNorth', halfpi);
+	azimuth := GetSvdAng ('Shad_Azimuth', 0.0);
+	altitude :=GetSvdAng ('ShadAltitude', halfpi);
+	if realequal (azimuth, 0.0, ABSZero) or realequal(altitude, halfpi, ABSZero) then
+		sunposmsg := '';
+		SaveStr ('ShadSunPosMg', sunposmsg, false);
+	else
+		GetSvdStr ( 'ShadSunPosMg', '', sunposmsg);
+	end;
+	colour := GetSvdInt ('ShadColour', -1);
+	hatchclr := GetSvdInt('ShadHatchClr', -1);
+	hatchlines := GetSvdInt ('ShadHtchLins', 0);
+	if scaletype < 6 then
+		r := 192.0;	! default to 6 inches
+	else
+		r := 188.9763779527559;	! default to 15cm
+	end;
+	hatchspace := GetSvdRl ('ShadHtchSpcg', r ); 
+	hatchang := GetSvdAng ('ShadHtchAngl', 0.0);
+
+  entityss := GetSvdInt ('ShadEntSlSet', -1);
+
+	trim := GetSvdBln ('ShadTrim', true);
+
+	GetSvdStr ('ShadowEntTps', '', s);
+	DecodeEntTyp (s);
+	
+	zplane := GetSvdBln ('ShadZedPlane', true);
+	zheight := GetSvdRl ('ShadZedHight', 0.0);
+
+	! check if a surface polygon has previously been selected for this drawing
+	ss := false;
+	setnil (surface.addr);
+	if atr_sysfind ('ShadSurface', atr) then
+		if ent_get (surface, entaddr(atr.lgladdr)) then
+			if surface.enttype = entply then
+				ss := true;
+			end;
+		end;
+	end;
+	if not ss then
+		setnil (surface.addr);
+		if not zplane then 
+			zplane := true;
+			cvdisst (zheight, tempstr);
+			if StartsWith (tempstr, '.', false) then
+				strins (tempstr, '0', 1);
+			end;
+			DisplayVerboseMsg (3, tempstr);
+			SaveBln ('ShadZedPlane',zplane, true);
+		end;
+	end;
+
+	DC190 := false;
+	DC191 := false;
+	DCVer := GetIniRl ('DCAD_Version', 0.0	);
+	if DCVer = 0.0 then
+		TempStr := 'Are you using DataCAD version 19 or greater ?\r';
+		res := msg_dlg (TempStr, 4, 1);
+		if res = 1 then
+			DCVer := DCAD_Version;
+			SaveIniRl ('DCAD_Version', DCVer);
+			tempstr := 'Thank you. The appropriate configuration as been\r';
+			strcat (tempstr, 'saved, and you will not be asked again');
+			msg_OK (tempstr);
+			DC190 := true;
+			if DCVer >= 31683.3583333 * 6.0 then
+				DC191 := true;
+			end;
+		elsif res = 2 then
+			DCVer := 18.0;
+			SaveIniRl ('DCAD_Version', DCVer);
+			tempstr :=       'Thank you. The appropriate configuration as been\r';
+			strcat (tempstr, 'saved, and you will not be asked again.\r\r');
+			strcat (tempstr, 'Refer to the instruction document on how to change\r');
+			strcat (tempstr, 'this setting if you upgrade to DataCAD 19 or\r');
+			strcat (tempstr, 'greater in the future');
+			msg_OK (tempstr);
+		else
+			tempstr :=       'Thank you. You will continue to be asked this question\r';
+			strcat (tempstr, 'each time you use this macro until you answer either\r');
+			strcat (tempstr, 'YES or NO');
+			msg_OK (tempstr);
+		end;
+	elsif DCVer >= 31666.8333333 * 6.0 then
+		DCVer := DCAD_Version;
+		DC190 := true;
+		SaveIniRl ('DCAD_Version', DCVer);
+		if DCVer >= 31683.33 * 6.0 then
+			DC191 := true;
+		end;
+	end;
+	VoidRegen := GetSvdBln ('VoidRegen', false);
+END Initialise;
+
+BEGIN
+	Initialise;
+
+	done := false;
+	REPEAT
+		wrtlvl ('Shadow');
+		wrtmsg(namever);
+		lblsinit;
+		lblset (1, 'North');
+		cvangst (north, str);
+		lblmsg (1, str);
+		lblset (2, 'Sun Position');
+		str := 'Set azimuth & altitude (currently ';
+		if strlen(sunposmsg) > 0 then
+			strcat (str, sunposmsg);
+		else
+			cvangst (azimuth, str1);
+			strcat (str, str1);
+			strcat (str, ' and ');
+			cvangst (altitude, str1);
+			strcat (str, str1);
+		end;
+		strcat (str, ')');
+		lblmsg (2, str);
+		
+		lblset (3, 'Sun-eye view');
+		lblmsg (3, 'Set viewing projection to view from the sun position');
+		
+		lblset (5, 'Entities');
+		if entityss >=0 then
+			ssGetName (entityss, tempstr);
+			tempbln := false;
+			if not doPly then
+				strcat (tempstr, ', exclude Ply');
+				tempbln := true;
+			end;
+			if not doLin then
+				if not tempbln then
+					strcat (tempstr, ', exclude 2D Lin');
+					tempbln := true;
+				else
+					strcat (tempstr, ', 2D Lin');
+				end;
+			end;
+			if not doLn3 then
+				if not tempbln then
+					strcat (tempstr, ', exclude 3D Lin');
+					tempbln := true;
+				else
+					strcat (tempstr, ', 3D Lin');
+				end;
+			end;
+			
+			strins (tempstr, ' (', 1);
+			strcat (tempstr, ')');
+		else
+			tempstr := ' ';
+		end;
+		strins (tempstr, 'Select entities to cast shadows', 1);
+		lblmsg (5, tempstr);
+
+		lblset (6, 'Hilite');
+		lblmsg (6, 'Highlight Surface and Entities');
+
+		lblset (7, 'Surface');
+		tempstr := 'Define surface shadows are cast onto (';
+		if zplane then
+			strcat (tempstr, 'horizontal plane at ');
+			cvdisst (zheight, str);
+			strcat (tempstr, str);
+			strcat (tempstr, ')');
+		else
+			strcat (tempstr, 'polygon selected)');
+		end;
+		lblmsg (7, tempstr);
+		
+		if not zplane then
+			lblsett (8, 'Trim Shadow', trim);
+			lblmsg (8, 'Trim Shadow to surface polygon');
+		end;
+		
+		lblsett (10, 'Hatch', hatchlines > 0);
+		tempstr := 'Hatch the shadows';
+		if hatchlines = 1 then
+			strcat (tempstr, ' (single lines)');
+		elsif hatchlines = 2 then
+			strcat (tempstr, ' (Cross Hatch)');
+		elsif hatchlines = 3 then
+			strcat (tempstr, ' (Net3)');
+		elsif hatchlines = 5 then
+			strcat (tempstr, ' (Solid Fill)');
+		end;
+		lblmsg (10, tempstr);
+		
+		lblsett (13, 'Spec Clr', colour >= 0);
+		tempstr := 'Specify a colour to draw shadows';
+		if colour > 0 then
+			GetClrName (colour, str);
+			strcat (tempstr, ' (');
+			strcat (tempstr, str);
+			strcat (tempstr, ')');
+		end;
+		lblmsg (13, tempstr);
+		
+		lblsett (14, 'Curr Clr', colour < 0 and colour > -1000);
+		lblmsg (14, 'Shadows will be drawn in the current colour');
+		
+		lblsett (15, 'Ent Clr', colour < -1000);
+		lblmsg (15, 'Shadow will be drawn the same colour as the entity casting it');
+		
+		lblsett (16, 'Layer', strlen(lyrname) > 0);
+		tempstr := 'Lyr to draw shadows on (';
+		if strlen (lyrname) > 0 then
+			strcat (tempstr, lyrname);
+		else
+			strcat (tempstr, 'currently not set');
+		end;
+		strcat (tempstr, ')');
+		lblmsg (16, tempstr);
+
+		lblset (18, 'Start');
+		lblmsg (18, 'Generate shadows for selected entities');
+
+		lblset (19, 'Documentation');
+		lblmsg (19, 'Display the instruction document for this macro.');
+		
+		lblset (20, 'Exit');
+
+		lblson;
+		
+		getesc (key);
+		IF key = s9 THEN
+			ExecAndWait ('ShadHelp.exe', 1, res);
+			if res <> 0 then
+				beep;
+			end;
+		ELSIF key=f1 THEN
+			GetNorth;
+		ELSIF key=f2 THEN
+			GetSunPos;
+		ELSIF key = f3 THEN
+			SunsEye (entityss, north, azimuth, altitude);
+			HighlightEnt (surface, true, true);
+			HighlightSS (entityss, true, false);
+		ELSIF key = f5 THEN
+			UserSelectSS;
+		ELSIF key = F6 THEN
+			HighlightSS (EntitySS, true, false);
+			HighlightEnt (surface, true, true);
+		ELSIF key = f7 THEN
+			GetSurface;
+		ELSIF key = f8 THEN
+			if not zplane then
+				trim := not trim;
+				SaveBln ('ShadTrim', trim, true);
+			end;
+		ELSIF key = f0 THEN
+			HatchSettings;
+		ELSIF key = s3 THEN
+			GetSpecColour;
+		ELSIF key = s4 THEN
+			colour := -absi(colour);
+			if colour < -1000 then
+				colour := colour+1000;
+			end;
+			SaveInt ('ShadColour', colour, true);
+		ELSIF key = s5 THEN
+			colour := -absi(colour);
+			if colour > -1000 then
+				colour := colour-1000;
+			end;
+			SaveInt ('ShadColour', colour, true);
+		ELSIF key = s6 THEN
+			GetShadowLyr;
+		ELSIF key = s8 THEN
+			GenShadows;
+{		ELSIF key = s9 THEN
+			showprogress := not showprogress;}
+		ELSIF key = s0 THEN
+			done := true;
+		END;
+
+	UNTIL done;
+	
+	Redraw;		! get rid of any higlights that are hanging around
+END Shadow.
+

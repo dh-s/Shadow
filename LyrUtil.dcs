@@ -1,0 +1,40 @@
+MODULE LayerUtil;
+
+VAR
+	tempstr	: str255;
+	lyr			: layer;
+!	tempstr8: str8;
+!	yr, m, d: integer;
+!	h, mi, sm, hu	:integer;
+
+FUNCTION Lyr_Create19 (lname : string; lyr : IN OUT layer; DC19 : boolean) : boolean;	PUBLIC;
+	!DataCAD 19 added long layer name support to lyr_find and setlyrname (but not lyr_create)
+	!so we need to create layer with a temp name and then rename it ...
+BEGIN
+	if strlen(lname) = 0 then
+		return false;
+	end;
+	wrterr ('Layer Creation in Progress');
+	if strlen(lname)<= 8 then
+		if not lyr_create (lname, lyr) then
+			wrterr ('');
+			return false;
+		end;
+	elsif not DC19 then
+		return false;
+	elsif strlen(lname) > 80 then
+		return false;
+	else
+		tempstr := 'dhtmplyr';
+		if not lyr_create (TempStr, lyr) then
+			wrterr('');
+			return false;
+		else
+			setlyrname (lyr, lname);
+		end;
+	end;
+	wrterr ('');
+	return true;
+END Lyr_Create19;
+
+END LayerUtil.

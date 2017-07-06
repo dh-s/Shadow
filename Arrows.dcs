@@ -1,0 +1,126 @@
+MODULE	Arrows;
+
+# INCLUDE '..\\..\\Inc\\_misc.inc'
+
+PROCEDURE ShowArrow (ang : real; txt : str255; clr : integer);		PUBLIC;
+VAR
+	direction	: real;
+	arrow,
+	text		: entity;
+	currview	: view_type;
+	mat				: modmat;
+	ctr				: point;
+	i					: integer;
+	emin, emax: point;
+	txtlen		: real;
+	sv				: boolean;
+BEGIN
+	direction := ang;
+	while direction > TwoPi do
+		direction := direction - TwoPi;
+	end;
+	while direction < 0.0 do
+		direction := direction + TwoPi;
+	end;
+	view_checkmode(vmode_orth);
+	view_getcurr (currview);
+	ctr.x := currview.windxmin + 100.0 * pixsize;
+	ctr.y := currview.windymin + 100.0 * pixsize;
+	ctr.z := 0.0;
+	setrotrel (mat, direction-HalfPi, z, ctr);
+	
+	! clear an area on screen for the arrow
+	ent_init (arrow, entlin);
+	arrow.width := 3;
+	arrow.linpt1.z := 0.0;
+	arrow.linpt2.z := 0.0;
+	sv := showwgt;
+	showwgt := true;
+	for i := 52 to 148 do
+		arrow.linpt1.x := currview.windxmin + float(i) * pixsize;
+		arrow.linpt1.y := currview.windymin;
+		arrow.linpt2.x := arrow.linpt1.x;
+		arrow.linpt2.y := currview.windymin + 200.0 * pixsize;
+		xformpt (arrow.linpt1, mat, arrow.linpt1);
+		xformpt (arrow.linpt2, mat, arrow.linpt2);
+		ent_draw (arrow, drmode_black);
+	end;
+	showwgt := sv;
+	
+	! construct the arrow entity
+	ent_init (arrow, entply);
+	arrow.plypnt[1].x := currview.windxmin + 99.0 * pixsize;
+	arrow.plypnt[1].y := currview.windymin;
+	arrow.plypnt[1].z := 0.0;
+	arrow.plypnt[2].x := currview.windxmin + 101.0 * pixsize;
+	arrow.plypnt[2].y := currview.windymin;
+	arrow.plypnt[2].z := 0.0;
+	arrow.plypnt[3].x := currview.windxmin + 101.0 * pixsize;
+	arrow.plypnt[3].y := currview.windymin + 196.0 * pixsize;
+	arrow.plypnt[3].z := 0.0;
+	arrow.plypnt[4].x := currview.windxmin + 141.0 * pixsize;
+	arrow.plypnt[4].y := currview.windymin + 156.0 * pixsize;
+	arrow.plypnt[4].z := 0.0;
+	arrow.plypnt[5].x := currview.windxmin + 142.0 * pixsize;
+	arrow.plypnt[5].y := currview.windymin + 158.0 * pixsize;
+	arrow.plypnt[5].z := 0.0;
+	arrow.plypnt[6].x := currview.windxmin + 100.0 * pixsize;
+	arrow.plypnt[6].y := currview.windymin + 200.0 * pixsize;
+	arrow.plypnt[6].z := 0.0;
+	arrow.plypnt[7].x := currview.windxmin + 58.0 * pixsize;
+	arrow.plypnt[7].y := currview.windymin + 158.0 * pixsize;
+	arrow.plypnt[7].z := 0.0;
+	arrow.plypnt[8].x := currview.windxmin + 59.0 * pixsize;
+	arrow.plypnt[8].y := currview.windymin + 156.0 * pixsize;
+	arrow.plypnt[8].z := 0.0;
+	arrow.plypnt[9].x := currview.windxmin + 99.0 * pixsize;
+	arrow.plypnt[9].y := currview.windymin + 196.0 * pixsize;
+	arrow.plypnt[9].z := 0.0;
+	arrow.plynpnt := 9;
+	for i := 1 to 9 do
+		xformpt (arrow.plypnt[i], mat, arrow.plypnt[i]);
+	end;
+	if clr > 0 then
+		arrow.color := clr;
+	end;
+
+	! construct the text entity
+	ent_init (text, enttxt);
+	text.txtsize := 12.0 * pixsize;
+	text.txtslant := 0.0;
+	text.txtbase := 0.0;
+	text.txthite := 0.0;
+	text.txtfont := 'Roman';
+	strassign (text.txtstr, txt);
+	text.txtpnt.z := 0.0;
+	text.txtang := 0.0;
+	ent_extent (text, emin, emax);
+	txtlen := emax.x - emin.x;
+	if txtlen > 175.0 * pixsize then
+		text.txtaspect := txtlen/(175.0 * pixsize);
+		txtlen := 175.0 * pixsize;
+	else
+		text.txtaspect := 1.0;
+	end;
+	if direction > halfpi and direction < (pi + halfpi) then
+		text.txtang := direction + pi;
+		text.txtpnt.x := currview.windxmin + 110.0 * pixsize;
+		text.txtpnt.y := currview.windymin + 90.0 * pixsize + txtlen/2.0;
+	else
+		text.txtang := direction;
+		text.txtpnt.x := currview.windxmin + 90.0 * pixsize;
+		text.txtpnt.y := currview.windymin + 90.0 * pixsize - txtlen/2.0;
+	end;
+	xformpt (text.txtpnt, mat, text.txtpnt);
+	if clr > 0 then
+		text.color := clr;
+	end;
+
+	! draw them
+	ent_draw (arrow, drmode_white);
+	ent_draw (text, drmode_white);
+	
+END ShowArrow;
+
+
+END Arrows.

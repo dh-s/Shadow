@@ -1,0 +1,232 @@
+MODULE StrUtil;
+
+# INCLUDE '..\\..\\Inc\\_misc.inc'
+
+PROCEDURE msg_OK (msg : str255); BUILTIN 245;
+FUNCTION msg_dlg (msg : str255; msgDlgType, msgDlgButtons : integer) : integer; BUILTIN 246;
+
+FUNCTION BlankString (s : string): boolean;		PUBLIC;
+VAR
+	i	: integer;
+	s1: string(1);
+BEGIN
+		if strlen(s) = 0 then
+			return true;
+		end;
+		for i := 1 to strlen(s) do
+			strsub (s, i, 1, s1);
+			if not strcomp (s1, ' ', 1) then
+				return false;
+			end;
+		end;
+		return true;
+
+END BlankString;
+
+FUNCTION StartsWith (target : IN string; prefix : IN string; casesensitive : boolean) : boolean;	PUBLIC;
+VAR
+	i : integer;
+	ct, cp	: string(1);
+	t, p	: str255;
+	
+BEGIN
+	if strlen(prefix) > strlen(target) then 
+		return false;
+	end;
+	strassign (t, target);
+	strassign (p, prefix);
+	if not casesensitive then
+		strupcase (t, true);
+		strupcase (p, true);
+	end;
+	for i := 1 to strlen(p) do
+		strsub (t, i, 1, ct);
+		strsub (p, i, 1, cp);
+		if not strcomp (ct, cp, 1) then
+			return false;
+		end;
+	end;
+	return true;
+END StartsWith;
+
+FUNCTION EndsWith (target : string; suffix : string; casesensitive : boolean) : boolean;	PUBLIC;
+VAR
+	i : integer;
+	ct, cs	: string(1);
+	t, s		: str255;
+	lendif	: integer;
+	tempstr : str255;
+BEGIN
+	if strlen(suffix) > strlen(target) then 
+		return false;
+	end;
+	strassign (t, target);
+	strassign (s, suffix);
+	if not casesensitive then
+		strupcase (t, true);
+		strupcase (s, true);
+	end;
+	lendif := strlen(target) - strlen(suffix);
+	for i := 1 to strlen(suffix) do
+		strsub (t, lendif+i, 1, ct);
+		strsub (s, i, 1, cs);
+		if not strcomp (ct, cs, 1) then
+			return false;
+		end;
+	end;
+	return true;
+END EndsWith;
+
+FUNCTION ValidFileName (s : string; strname : string) : integer; 		PUBLIC;
+!!! returns 0 if everything ok, otherwise returns 1 if user presses OK, -1 if user presses Cancel
+VAR
+	result	: boolean;
+	msg			: str255;
+	invalids: str255;
+BEGIN
+	result := true;
+	invalids := '';
+	msg := '';
+	if strlen(s) = 0 then
+		result := false;
+		strassign (msg, strname);
+		strcat (msg, ' may not be blank.\r');
+	else
+		if strpos (' ', s, 1) = 1 then
+			result := false;
+			strassign (msg, strname);
+			strcat (msg, ' may not start with a space.\r\r');
+		end;
+		if strpos ('|', s, 1) > 0 then
+			strcat (invalids, 'pipe (|), ');
+		end;
+		if strpos ('\\', s, 1) > 0 then
+			strcat (invalids, 'backslash (\\), ');
+		end;
+		if strpos ('<', s, 1) > 0 then
+			strcat (invalids, 'angle bracket (<), ');
+		end;
+		if strpos ('>', s, 1) > 0 then
+			strcat (invalids, 'angle bracket (>), ');
+		end;
+		if strpos ('*', s, 1) > 0 then
+			strcat (invalids, 'asterisk (*), ');
+		end;
+		if strpos ('?', s, 1) > 0 then
+			strcat (invalids, 'question mark (?), ');
+		end;
+		if strpos ('/', s, 1) > 0 then
+			strcat (invalids, 'slash (/), ');
+		end;
+		if strpos (':', s, 1) > 0 then
+			strcat (invalids, 'colon (:), ');
+		end;
+		if strpos ('"', s, 1) > 0 then
+			strcat (invalids, 'quote ("), ');
+		end;
+		if strlen(invalids) > 0 then
+			result := false;
+			strdel (invalids, strlen(invalids)-1, 2);
+			strcat (msg, strname);
+			strcat (msg, ' may not contain the following characters:\r');
+			strcat (msg, invalids);
+		end;
+	end;
+	
+	if not result then
+		if msg_dlg (msg, 2, 2) = 4 then
+			return 1;
+		else
+			return -1;
+		end;
+	end;
+
+	return 0;
+
+END ValidFileName;
+
+
+PROCEDURE AppendDateTimeStamp (Str : IN OUT String; 
+															 doDate : boolean; 
+															 doTime : boolean;
+															 TimeColons : boolean;
+															 spacebetween : boolean);	PUBLIC;
+VAR
+	y,m,d,h,mi,s,hu	: integer; !year, month, day, hours, minutes, seconds, hundredths
+	tempstr				: str255;
+	
+	PROCEDURE Append2DigitStr (num : IN integer);
+	!!! actually allows more than 2 digits, but inserts a zero at the front of the string if it is less than 2 digits
+	BEGIN
+		cvintst (num, tempstr);
+		if strlen(tempstr)<2 then
+			strins (tempstr, '0', 1);
+		end;
+		strcat (str, tempstr);
+	END Append2DigitStr;
+
+BEGIN
+	if not (doDate or doTime) then
+		return;
+	end;
+	ReadClock (y, m, d, h, mi, s, hu);
+	if doDate then
+		Append2DigitStr (y);
+		Append2DigitStr (m);
+		Append2DigitStr (d);
+		if doTime and spacebetween then
+			strcat (str, ' ');
+		end;
+	end;
+	if DoTime then
+		Append2DigitStr (h);
+		if timecolons then
+			strcat (str, ':');
+		end;
+		Append2DigitStr (mi);
+		if timecolons then
+			strcat (str, ':');
+		end;
+		Append2DigitStr (s);
+	end;
+End AppendDateTimeStamp;
+
+
+PROCEDURE RemoveChars (str : IN OUT string; CharsToRemove : string);	PUBLIC;
+VAR
+	ndx, pos		: integer;
+	pat				: string(1);
+BEGIN
+	FOR ndx := 1 to strlen(CharsToRemove) DO
+		strsub(CharsToRemove, ndx, 1, pat);
+		pos := strpos (pat, str, 1);
+		WHILE pos > 0 DO
+			strdel (str, pos, 1);
+			pos := strpos (pat, str, 1);
+		END;
+	END;
+END RemoveChars;
+
+PROCEDURE GetClrName (clr : IN integer; clrname : OUT string);	PUBLIC;
+! this replaces the standard clrGetName procedure. The clrGetName proc will output
+! a maximum of 8 character string, which means that the result is sometimes misleading
+! due to the string being truncated (e.g. Color_085 gets truncated to Color_08)
+VAR
+	str, str1	: str80;
+BEGIN
+	clrGetName (clr, str);
+	if clr > 99 then
+		cvintst (clr, str1);
+		strins (str1, 'Color_', 1);
+		if StartsWith (str1, str, false) then
+			clrname := str1;
+		else
+			clrname := str;
+		end;
+	else
+		clrname := str;
+	end;
+
+END GetClrName;
+
+END StrUtil.

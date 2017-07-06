@@ -1,0 +1,1 @@
+FUNCTION Lyr_Create19 (lname : string; lyr : IN OUT layer; DC19 : boolean) : boolean;	EXTERNAL;

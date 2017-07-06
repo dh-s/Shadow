@@ -1,0 +1,225 @@
+MODULE ErrUtil;
+
+# INCLUDE 'StrUtil.inc'
+# INCLUDE 'Settings.inc'
+
+PROCEDURE msg_OK (msg : str255); BUILTIN 245;
+PROCEDURE execAndWait ( prog : str255; Visibility: integer; returnCode : OUT integer); BUILTIN 632;
+
+FUNCTION DisplayFileError (res : integer; desc : string) : boolean;			PUBLIC;
+!!! this function checks if the passed res is an error or not.
+!!! if it is not an error then false is returned
+!!! if it is an error then an appropriate msg is displayed and true is returned
+VAR
+	msg	: str255;
+BEGIN
+	IF res = fl_ok THEN
+		return false;
+	ELSIF res = fl_access_denied THEN
+		msg := 'Access Denied';
+	ELSIF res = fl_invalid_access_code THEN
+		msg := 'Invalid Access Code';
+	ELSIF res = fl_invalid_function THEN
+		msg := 'Invalid Function';
+	ELSIF res = fl_invalid_handle THEN
+		msg := 'Invalid Handle';
+	ELSIF res = fl_no_handles_left THEN
+		msg := 'No Handles Left';
+	ELSIF res = fl_not_found THEN
+		msg := 'File Not Found';
+	ELSE
+		msg := 'An';
+	END;
+	strcat (msg, ' error occurred ');
+	strcat (msg, desc);
+	msg_OK (msg);
+	return true;
+END DisplayFileError;
+
+PROCEDURE DisplayVerboseMsg (msgnum : integer; param : string);		PUBLIC;
+!!! error to display identified by msgnum. 
+!!! Note that although DCAL supports strings up to 255 chars, the max hard-coded string length the compiler
+!!! will accept is 80. So need to build up longer strings using strcat etc.
+VAR
+	msg : str255;
+BEGIN
+	if msgnum = 1 then
+		msg := 'Unexpected result casting shadows:\r';
+		strcat (msg, '  Excessive iterations in trim loop.\r\r');
+		strcat (msg, 'Interim Shadow lines have been shown\rtemporarily on drawing (refresh to remove)');
+		msg_OK (msg);
+		msg := 'Please dismiss this message and take a screen dump and send the dump\r';
+		strcat (msg, 'to the author (dhsoftware1@gmail.com) together with any other\r');
+		strcat (msg, 'details you are willing to share (e.g. drawing file)\r');
+		strcat (msg, '\rThank you');
+	elsif msgnum = 2 then 
+		msg := 'No entity types have been specified for shadow casting.\r\r';
+		strcat (msg, 'Go to Shadow Entities menu (F5) and then select Ent\r');
+		strcat (msg, 'Types (S8) to specify types of entities to cast shadows.\r');
+	elsif msgnum = 3 then
+		msg := ''; !'CANNOT FIND SURFACE POLYGON\r\r';
+!		strcat (msg, 'Looks like you previously selected a polygon as\r');
+!		strcat (msg, 'shadow surface in this drawing, but the polygon\r');
+!		strcat (msg, 'cannot be found (maybe you\'ve deleted it?)\r\r');
+		strcat (msg, 'Setting surface to a horizontal plane at ');
+		strcat (msg, param);
+		strcat (msg, '.\r');
+	else
+		msg := 'An error of some sort has happened when running the macro.\r\r';
+		strcat (msg, 'Please advise the author (dhsoftware1@gmail.com) including\r');
+		strcat (msg, 'as many details as possible.\r');
+		strcat (msg, '\rThank you');
+	end;
+	msg_OK (msg);
+END DisplayVerboseMsg;
+
+VAR
+	LogFile :  file;
+	LogFileName : str80;
+	MacroNm		: str80;
+	logon		: boolean;
+	logging : boolean;
+	
+PROCEDURE InitLog (MacroName : string);		PUBLIC;
+BEGIN
+	logging := false;
+	LogOn := GetSvdBln ('Logging', false);
+	MacroNm := MacroName;
+END InitLog;
+
+PROCEDURE CloseLog;		PUBLIC;
+VAR
+	TempStr : str80;
+	res : integer;
+BEGIN
+	res := f_close (LogFile); 
+	if logging then
+		if DisplayFileError (res, 'closing log file') then
+			logging := false;
+		end;
+	end;
+	if not logging then
+		return;
+	end;
+	TempStr := MacroNm;
+	strcat (TempStr, '.log');
+	if file_exist (TempStr) then
+		res := file_del (TempStr);
+		if DisplayFileError (res, 'Deleting old log file') then
+			return;
+		end;
+	end;
+	res := file_ren (LogFileName, TempStr);
+	if logging then
+		if DisplayFileError (res, 'renaming log file') then
+			logging := false;
+			return;
+		end;
+	end;
+	logging := false;
+END CloseLog;
+
+PROCEDURE OpenLog;		PUBLIC;
+VAR
+	TempStr	: str255;
+	res	: integer;
+BEGIN
+	if not LogOn then
+		logging := false;
+		return;
+	end;
+	Strassign (LogfileName, MacroNm);
+	strcat (LogFileName, '_');
+	AppendDateTimeStamp (LogFileName, true, true, false, false);
+	strcat (LogFileName, '.log');
+	res := f_create (LogFile, LogFileName, true);
+	logging := not DisplayFileError (res, 'opening Log File');
+	if logging then
+		TempStr := 'BEGIN LOG ';
+		AppendDateTimeStamp (TempStr, true, true, true, true);
+		logging := not DisplayFileError (f_wrstr (LogFile, TempStr), 'writing to log file');
+		logging := not DisplayFileError (f_wrln (LogFile), 'writing line to log file');
+	end;
+	if not logging then
+		CloseLog;
+	end;
+END OpenLog;
+
+PROCEDURE LogStr (str : string); 	PUBLIC;
+VAR
+	TempStr	: str255;
+BEGIN
+	if logging then	
+		TempStr := '';
+		AppendDateTimeStamp (TempStr, false, true, true, false);
+		strcat (tempstr, ' ');
+		strcat (TempStr, str);
+		logging := not DisplayFileError (f_wrstr (LogFile, TempStr), 'writing string to log file');
+		logging := not DisplayFileError (f_wrln (LogFile), 'writing line to log file');
+		if not logging then
+			CloseLog;
+		end;
+	end;
+END LogStr;
+
+PROCEDURE LogStrDis (str : string; dis : real); 	PUBLIC;
+VAR
+	s	: str80;
+	TempStr	: str255;
+BEGIN
+	if logging then	
+		TempStr := '';
+		AppendDateTimeStamp (TempStr, false, true, true, false);
+		strcat (tempstr, ' ');
+		strcat (TempStr, str);
+		cvdisst (dis, s);
+		strcat (TempStr, s);
+		logging := not DisplayFileError (f_wrstr (LogFile, TempStr), 'writing string to log file');
+		logging := not DisplayFileError (f_wrln (LogFile), 'writing line to log file');
+		if not logging then
+			CloseLog;
+		end;
+	end;
+END LogStrDis;
+
+PROCEDURE LogStrAng (str : string; ang : real); 	PUBLIC;
+VAR
+	s	: str80;
+	TempStr	: str255;
+BEGIN
+	if logging then	
+		TempStr := '';
+		AppendDateTimeStamp (TempStr, false, true, true, false);
+		strcat (tempstr, ' ');
+		strcat (TempStr, str);
+		cvangst (ang, s);
+		strcat (TempStr, s);
+		logging := not DisplayFileError (f_wrstr (LogFile, TempStr), 'writing string to log file');
+		logging := not DisplayFileError (f_wrln (LogFile), 'writing line to log file');
+		if not logging then
+			CloseLog;
+		end;
+	end;
+END LogStrAng;
+
+PROCEDURE LogStrInt (str : string; i : integer); 	PUBLIC;
+VAR
+	s	: str80;
+	TempStr	: str255;
+BEGIN
+	if logging then	
+		TempStr := '';
+		AppendDateTimeStamp (TempStr, false, true, true, false);
+		strcat (tempstr, ' ');
+		strcat (TempStr, str);
+		cvintst (i, s);
+		strcat (TempStr, s);
+		logging := not DisplayFileError (f_wrstr (LogFile, TempStr), 'writing string to log file');
+		logging := not DisplayFileError (f_wrln (LogFile), 'writing line to log file');
+		if not logging then
+			CloseLog;
+		end;
+	end;
+END LogStrInt;
+
+END ErrUtil.
