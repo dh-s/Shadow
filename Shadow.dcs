@@ -30,7 +30,7 @@ PROGRAM Shadow;
 
 # INCLUDE '..\\..\\Inc\\_pline.inc'
 # INCLUDE '..\\..\\Inc\\_misc.inc'
-# INCLUDE '..\\..\\Inc\\_hatch.inc'
+# INCLUDE '..\\..\\Inc\\_hatch.inc'	
 
 # INCLUDE 'pntutil.inc'
 # INCLUDE 'Errutil.inc'
@@ -39,6 +39,7 @@ PROGRAM Shadow;
 # INCLUDE 'SolidFll.inc'
 # INCLUDE 'Arrows.inc'
 # INCLUDE 'LyrUtil.inc'
+# INCLUDE 'Layers.inc'
 
 CONST
    ssNum  = 11;
@@ -81,22 +82,34 @@ VAR
 	hatchlines: integer;		!0 = No Hatch,  1 = parralel lines,  2 =CrossHatch,  5 = solid fill
 	hatchspace: real;
 	hatchclr	: integer;
-	hatchang	: real;
+	hatchang	: real;		
+	hatchonly	: boolean;
 	hmin, hmax, hmin1, hmax1	: point;
 	extent1		: boolean;
 	vertical	: boolean;
 	toponly		: boolean;
 	showprogress : boolean;
 	
-	doPly			: boolean;
-	doLin			: boolean;
-	doLn3			: boolean;
+	
+	doLin, doLn3, do2DCurves, doBasic3D, do3DCurvSurf, doPln, doText, doSym, doDim : boolean;
 	
 	zplane		: boolean;
 	zheight		: real;
 	
 	Logfile		: file;
 	VoidRegen	: boolean;
+	DoCover		: boolean;
+	
+	hlent			: boolean;
+	hlentclr	: integer;
+	hlentWgt	: boolean;
+	hlentdash : boolean;
+	hlentpx		: integer;
+	hlsurf		: boolean;
+	hlsurfclr	: integer;
+	hlsurfWgt	: boolean;
+	hlsurfdash: boolean;
+	hlsurfpx	: integer;
 	
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
 FUNCTION msg_dlg (msg : str255; msgDlgType, msgDlgButtons : integer) : integer; BUILTIN 246;
@@ -137,7 +150,7 @@ END RemoveChars;
 PROCEDURE EncodeEntTyp (str : IN OUT string);
 BEGIN
 	str := '';
-	if doPly then
+	if doBasic3D then
 		strcat (str, 'Y');
 	else
 		strcat (str, 'N');
@@ -152,6 +165,31 @@ BEGIN
 	else
 		strcat (str, 'N');
 	end;
+	if do3DCurvSurf then
+		strcat (str, 'Y');
+	else
+		strcat (str, 'N');
+	end;
+	if doText then
+		strcat (str, 'Y');
+	else
+		strcat (str, 'N');
+	end;
+	if doPln then
+		strcat (str, 'Y');
+	else
+		strcat (str, 'N');
+	end;
+	if doSym then
+		strcat (str, 'Y');
+	else
+		strcat (str, 'N');
+	end;
+	if doDim then
+		strcat (str, 'Y');
+	else
+		strcat (str, 'N');
+	end;
 END EncodeEntTyp;
 
 PROCEDURE DecodeEntTyp (str : string);
@@ -160,9 +198,9 @@ VAR
 BEGIN
 	if strlen(str) >= 1 then
 		strsub (str, 1, 1, s);
-		doPly := strpos ('Y', s, 1) = 1;
+		doBasic3D := strpos ('Y', s, 1) = 1;
 	else
-		doPly := true;
+		doBasic3D := true;
 	end;
 	if strlen(str) >= 2 then
 		strsub (str, 2, 1, s);
@@ -175,6 +213,30 @@ BEGIN
 		doLn3 := strpos ('Y', s, 1) = 1;
 	else
 		doLn3 := true;
+	end;
+	if strlen(str) >= 4 then
+		strsub (str, 4, 1, s);
+		do3DCurvSurf := strpos ('Y', s, 1) = 1;
+	else
+		do3DCurvSurf := true;
+	end;
+	if strlen(str) >= 5 then
+		strsub (str, 5, 1, s);
+		doText := strpos ('Y', s, 1) = 1;
+	else
+		doText := true;
+	end;
+	if strlen(str) >= 6 then
+		strsub (str, 6, 1, s);
+		doPln := strpos ('Y', s, 1) = 1;
+	else
+		doPln := true;
+	end;
+	if strlen(str) >= 7 then
+		strsub (str, 7, 1, s);
+		doSym := strpos ('Y', s, 1) = 1;
+	else
+		doSym := true;
 	end;
 END DecodeEntTyp;
 
@@ -346,8 +408,8 @@ BEGIN
 	wrtmsg ('Enter description: ');
 	getstr (desc, 80);
 	
-	getpath (path, pathmcr);
-	strcat (path, 'Shad\\*');	! asterisk added for file_pattern call
+	getpath (path, pathsup);
+	strcat (path, 'dhsoftware\\Shad\\*');	! asterisk added for file_pattern call
 	file_pattern (path, 0, buf);
 	strdel (path, strlen(path), 1);		! remove asterisk for later processing when we construct the file name
 	IF NOT file_find (filename, res, buf) THEN	! check if the directory already exists, if not then create it
@@ -419,6 +481,9 @@ VAR
 	savedlbl	: array [6..19] of string(24);
 	b : boolean;
 	r : real;
+	sunpos : str255;
+	svMsg : str80;
+	sval, svaz : real;
 
 	
 	PROCEDURE ShowSaved;
@@ -440,8 +505,8 @@ VAR
 		end;
 
 		! set the path variable up as a wildcard definition for the filtered sun files
-		getpath (path, pathmcr);
-		strcat (path, 'Shad\\');
+		getpath (path, pathsup);
+		strcat (path, 'dhsoftware\\Shad\\');
 		strassign (pathfilter, path);
 		strcat (pathfilter, filter);
 		strcat (pathfilter, '*.sun');		
@@ -570,9 +635,12 @@ BEGIN
 		ELSIF key =F3 THEN
 			SaveIniStr ('Filter', '');
 			SaveIniRl ('ShadAltitude', 0.0);
-			ExecAndWait ('SunPos.exe', 1, res);
+			getpath (sunpos, pathsup);
+			strcat (sunpos, 'dhsoftware\\Sunpos.exe');
+			ExecAndWait (sunpos, 1, res);
 			if res = 0 then
-				GetIniStr ( 'ShadSunPosMg', '', sunposmsg);
+			svmsg := sunposmsg;
+			GetIniStr ( 'ShadSunPosMg', '', sunposmsg);
 				GetIniStr ('Filter', '', s80);
 				if strlen (s80) > 0 then
 					strassign (filter, s80);
@@ -580,7 +648,9 @@ BEGIN
 				end;
 				r :=GetIniRl ('ShadAltitude', altitude);
 				if r <> 0.0 then
+					sval := altitude;
 					altitude := r;
+					svaz := azimuth;
 					azimuth := GetIniRl ('Shad_Azimuth', azimuth);
 					SaveStr ('ShadSunPosMg', sunposmsg, false);
 					SaveAng ('Shad_Azimuth', azimuth, false);
@@ -588,6 +658,17 @@ BEGIN
 					strassign (tempstr, sunposmsg);
 					strcat (tempstr, ' set as sun position');
 					wrterr (tempstr);
+					if (not strcomp (svmsg, sunposmsg, -1)) or (sval <> altitude) or (svaz <> azimuth) then
+						tempstr := 'Sun Position Changed to:\r\r';
+						strcat (tempstr, sunposmsg);
+						strcat (tempstr, '\rAltitude=');
+						cvangst (altitude, s80);
+						strcat (tempstr, s80);
+						strcat (tempstr, '     Azimuth=');
+						cvangst (azimuth, s80);
+						strcat (tempstr, s80);
+						msg_ok (tempstr);
+					end;
 					return;
 				end;
 			end;
@@ -762,7 +843,7 @@ BEGIN
 	! makes it easy to modify the sun position with the modelling matrix.
 	MyLogStr ('Calculating sun vector');
 	setpoint (sunvec[1], 0.0);
-	sphere_cart (1000.0, north+azimuth, altitude, sunvec[0].x, sunvec[0].y, sunvec[0].z);  ! Note: The radius of 1000 is just an arbitary number
+	sphere_cart (1000.0, north-azimuth, altitude, sunvec[0].x, sunvec[0].y, sunvec[0].z);  ! Note: The radius of 1000 is just an arbitary number
 	xformpt (sunvec[0], mat, sunvec[0]);
 	xformpt (sunvec[1], mat, sunvec[1]);
 	
@@ -787,6 +868,18 @@ BEGIN
 	END;
 END GetModMat;
 
+FUNCTION ProcessThisEnt (ent : IN entity) : boolean;
+BEGIN
+	return ((doBasic3D and ((ent.enttype = entply) or (ent.enttype = entslb) or (ent.enttype=entblk))) or
+					(DoLin and ((ent.enttype = entlin) or (ent.enttype = entarc) or (ent.enttype = entcrc) or (ent.enttype = entell) or (ent.enttype = entbez) or (ent.enttype = entbsp))) or
+					(DoLn3 and ((ent.enttype = entln3) or (ent.enttype = entar3))) or
+					(do3DCurvSurf and ((ent.enttype = entcon) or (ent.enttype = entcyl) or (ent.enttype = entrev) or (ent.enttype = enttor) or (ent.enttype = enttrn) or (ent.enttype = entdom))) or
+					(doText and ((ent.enttype = enttxt))) or
+					(doPln and ((ent.enttype = entpln))) or
+					(doSym and (ent.enttype = entsym)) or
+					(doDim and (ent.enttype = entdim)));
+END ProcessThisEnt;
+
 
 PROCEDURE HighlightEnt (ent: IN OUT entity; show : boolean; surface : boolean);
 VAR
@@ -797,15 +890,18 @@ VAR
 	svclr		: integer;
 	svspc		: real;
 	loopmax	: integer;
+	templyr	: layer;
+	tempmode: mode_type;
+	tempaddr: entaddr;
 BEGIN
 	if isnil (ent.addr) then
 		return;
-	elsif surface and ((ent.enttype <> entply) or zplane) then
+	elsif surface and ((ent.enttype <> entply) or zplane or (not hlsurf)) then
 		return ;
 	elsif not surface then
-		if not ((ent.enttype = entply and doply) or
-						(ent.enttype = entlin and doLin) or
-						(ent.enttype = entln3 and doLn3)) then
+		if not hlent then
+			return;
+		elsif not ProcessThisEnt (ent) then
 			return;
 		end;
 	end;
@@ -815,16 +911,29 @@ BEGIN
 	Svltype := ent.ltype;
 	svclr := ent.color;
 	if show then
-		ent.width := ent.width+1;
+		ent.width := ent.width + 1;
 		ent_draw_dl (ent, drmode_black, false);
-		ent.ltype := ltype_dashed;
-		if surface then
-			ent.spacing := 22.0*pixsize;
-		else
-			ent.spacing := 13.0*pixsize;
+		if not ((surface and hlsurfWgt) or ((not surface) and hlentWgt)) then		
+			ent.width := ent.width-1;
 		end;
-		ent.color := clrltgray;
-		if ent.enttype = entply then
+		if (surface and hlsurfdash) or ((not surface) and hlentdash) then
+			ent.ltype := ltype_dashed;
+		else
+			ent.ltype := ltype_solid;
+		end;
+		if surface and (hlsurfpx > 0) then
+			ent.spacing := float(hlsurfpx)*pixsize;
+		elsif (not surface) and (hlentpx > 0) then
+			ent.spacing := float(hlentpx)*pixsize;
+		end;
+		if (Surface and (hlsurfclr > 0)) then
+			ent.color := hlsurfclr;
+		elsif ((not surface) and hlentclr > 0) then
+			ent.color := hlentclr;
+		else
+			ent.color := clrltgray;
+		end;
+		if (ent.enttype = entply) and ((surface and hlsurfdash) or ((not surface) and hlentdash)) then
 			! In some views different edges of the polygon may overlap each other on the display (as
 			! would happen in a vertical polygon in plan view for example). In this case it is possible
 			! that the dashes in one overlapping line could fill in the spaces in the other line, and so
@@ -833,7 +942,7 @@ BEGIN
 			! reliable in the example of a vertical polygon in plan view, which is likely to be a 
 			! common scenario).
 			ent_init (tempent, entln3);
-			tempent.color := clrltgray;
+			tempent.color := ent.color;
 			tempent.spacing := ent.spacing;
 			tempent.width := ent.width;
 			if ent.plyNpnt <= 36 then
@@ -859,17 +968,39 @@ BEGIN
 				tempent.ltype := ltype_dashed;
 				ent_draw_dl (tempent, drmode_white, false);
 			end;
+		elsif ent.enttype = entsym then
+			ent_draw_dl (ent, drmode_black, false);
+			lyr_init (templyr);
+			if ent_explode (ent, templyr, 0)then
+				MyLogStr ('Temp hilite entities created');
+				ssClear  (ssNum);
+				mode_init (tempmode);
+				mode_1lyr (tempmode, templyr);
+				tempaddr := ent_first (tempmode);
+				tempbln := false;
+				while ent_get (tempent, tempaddr) do
+					tempaddr := ent_next (tempent, tempmode);
+					tempent.width := ent.width;
+					tempent.ltype := ent.ltype;
+					tempent.spacing := ent.spacing;
+					tempent.color := ent.color;
+					ent_draw_dl (tempent, drmode_white, false);
+				end;
+			end;
+			lyr_term (templyr);
 		else
 			ent_draw_dl (ent, drmode_white, false);
 		end;
 	else
-		ent.width := ent.width+1;
-		ent_draw_dl (ent, drmode_black, false);
-		ent.width := ent.width-1;
+!		ent.width := ent.width+1;
+!		ent_draw_dl (ent, drmode_black, false);
+!		ent.width := ent.width-1;
 		ent_draw_dl (ent, drmode_white, false);
-		ent.width := ent.width+1;
+!		ent.width := ent.width+1;
 	end;
-	ent.width := ent.width-1;
+	if (surface and hlsurfWgt) or ((not surface) and hlentWgt) then
+		ent.width := ent.width-1;
+	end;
 	ent.spacing := svspc;
 	ent.ltype := Svltype;
 	ent.color := svclr;
@@ -955,8 +1086,12 @@ BEGIN
 		if zplane then
 			strcat (tempstr, ' (z=');
 			cvdisst (zheight, str);
+			if zheight < 0.0 then
+				strcat (tempstr, '-');
+			end;
 			strcat (tempstr, str);
 			strcat (tempstr, ')');
+			wrterr (tempstr);
 		end;
 		lblmsg (1, tempstr);
 		lblsett (3, 'Polygon', not zplane);
@@ -964,6 +1099,11 @@ BEGIN
 		if not zplane then
 			lblsett (4, 'Top Only', toponly);
 			lblmsg (4, 'Cast shadows on upper surface only of non-vertical polygons');
+			if toponly then
+				wrterr ('Cast shadows on top surface of selected polygon');
+			else
+				wrterr ('Cast shadows on selected polygon');
+			end;
 		end;
 		lblset (20, 'Exit');
 		lblson;	
@@ -985,6 +1125,7 @@ BEGIN
 			lblson;
 			wrtmsg ('Enter height of z plane: ');
 			getdis (zheight);
+			wrtmsg ('');
 			SaveBln ('ShadZedPlane',zplane, true);
 			SaveRl ('ShadZedHight', zheight, true);
 		ELSIF key = f3 THEN
@@ -1051,25 +1192,92 @@ BEGIN
 	UNTIL false;
 END GetSurface;
 
+PROCEDURE EntTypesStr (str : IN OUT string);
+var
+	len : integer;
+BEGIN
+	if doLin and doLn3 and do2DCurves and doBasic3D and do3DCurvSurf and doPln and doText and doSym and doDim then
+		strcat (str, 'All entities');
+	else
+		len := strlen (str);
+		if doBasic3D and do3DCurvSurf then
+			strcat (str, '3D Surfaces & Solids, ');
+		elsif doBasic3D then
+			strcat (str, 'Slabs, Polygons, Blocks, ');
+		elsif do3DCurvSurf then
+			strcat (str, 'Curved 3D surfaces & solids, ');
+		end;
+		if doLin and doLn3 then
+			strcat (str, '2D & 3D Lines, ');
+		elsif doLin then
+			strcat (str, '2D Lines, ');
+		elsif doLn3 then
+			strcat (str, '3D Lines, ');
+		end;
+		if doPln then
+			strcat (str, 'Polylines, ');
+		end;
+		if doSym then
+			strcat (str, 'Symbols, ');
+		end;
+		if doText then
+			strcat (str, 'Text, ');
+		end;
+		if doDim then
+			strcat (str, 'Dimensions, ');
+		end;
+		if strlen (str) > len then
+			strdel (str, strlen(str)-1, 2);
+		else
+			strcat (str, 'no entity types specified');
+		end;
+	end;
+END EntTypesStr;
+
 PROCEDURE SelectEntTypes;
 VAR
 	key		: integer;
 	s			: str255;
 BEGIN
+	WrtLvl ('Entity Types');
 	EncodeEntTyp (s);
 	repeat
+		wrtmsg ('Choose entity types to cast shadows of');
 		lblsinit;
-		lblsett (1, '2D Line', doLin);
-		lblsett (3, '3D Line', doLn3);
-		lblsett (4, 'Polygon', doPly);
+		lblsett (1, 'Basic 3D Ents', doBasic3D);
+		lblmsg (1, 'Process Polygon, Slab, and Block entities');
+		lblsett (2, 'Curved 3D Ents', do3DCurvSurf);
+		lblmsg (2, 'Process Sphere, Dome, Cylinder, Cone, Surface of Rev, Torus, Mesh Surface');
+		lblsett (3, '3D Lines', doLn3);
+		lblmsg (3, 'Process straight and curved 3D Lines such as 3D circles and arcs');
+		lblsett (4, '2D Lines', doLin);
+		lblmsg (4, 'Process 2D lines, circles, arcs, elipses, beziers, b-splines');
+		lblsett (5, 'PolyLine', doPln);
+		lblmsg (5, 'Process Polylines');
+		lblsett (6, 'Symbols', doSym);
+		lblmsg (6, 'Process Symbols (regardless of the types of entity they contain)');
+		lblsett (7, 'Text', doText);
+		lblmsg (7, 'Cast shadows of Text entites');
+		lblsett (8, 'Dimensions', doDim);
+		lblmsg (8, 'Cast shadows of Associative Dimensions');
 		lblset (20, 'Exit');
 		getesc (key);
 		if key = f1 then
-			doLin := not doLin;
+			doBasic3D := not doBasic3D;
+		elsif key = f2 then
+			do3DCurvSurf := not do3DCurvSurf;
 		elsif key = f3 then
 			doLn3 := not doLn3;
 		elsif key = f4 then
-			doPly := not doPly;
+			doLin := not doLin;
+		elsif key = f5 then
+			doPln := not doPln;
+		elsif key = f6 then
+			doSym := not doSym;
+		elsif key = f7 then
+			doText := not doText;
+		elsif key = f8 then
+			doDim := not doDim;
 		end;
 		EncodeEntTyp (tempstr);
 		SaveStr ('ShadowEntTps', tempstr, true);
@@ -1115,22 +1323,7 @@ BEGIN
 			lblmsg (15, 'Rename Selection Set');
 			lblset (18, 'Ent Types');
 			tempstr := 'Select entity types to cast shadows (';
-			tempbln := false;
-			if doply then
-				strcat (tempstr, 'Ply,');
-				tempbln := true;
-			end;
-			if doLn3 then
-				strcat (tempstr, '3D Lin,');
-				tempbln := true;
-			end;
-			if doLin then
-				strcat (tempstr, '2D Lin,');
-				tempbln := true;
-			end;
-			if tempbln then
-				strdel (tempstr, strlen(tempstr), 1);
-			end;
+			EntTypesStr (tempstr);
 			strcat (tempstr, ')');
 			lblmsg (18, tempstr);
 		end;
@@ -1138,10 +1331,11 @@ BEGIN
 		wrtmsg ('Choose Selection Set to use for Shadow Entities');
 		lblson;
 		getesc (key);
-		if key = s0 then
+		key := fnkeyconv (key);
+		if key = 20 then
 			return;
-		elsif key >= f1 and key <= f8 then
-			key := key-f1;
+		elsif key >= 1 and key <= 8 then
+			key := key-1;
 			if key=entityss then
 				HighlightSS (entityss, true, false);
 			else
@@ -1150,10 +1344,10 @@ BEGIN
 				HighlightSS (entityss, true, false);
 			end;
 			SaveInt ('ShadEntSlSet', entityss, false);
-		elsif (key = s4) and (entityss >= 0) then
+		elsif (key = 14) and (entityss >= 0) then
 			reDraw;
 			ssClear (entityss);
-		elsif (key = s5) and (entityss >= 0) then
+		elsif (key = 15) and (entityss >= 0) then
 			lblsinit;
 			lblson;
 			ssGetName (entityss, tempstr);
@@ -1166,7 +1360,7 @@ BEGIN
 				ssSetName (entityss, tempstr);
 			end;
 			wrtmsg('');
-		elsif (key = s2) and (entityss >= 0) then
+		elsif (key = 12) and (entityss >= 0) then
 			lblsinit;
 			while getmode ('add to Selection Set', ssmode, key) = res_normal do
 				addr := ent_first (ssmode);
@@ -1178,7 +1372,7 @@ BEGIN
 					end;
 				END;
 			end;
-		elsif (key = s3) and (entityss >= 0) then
+		elsif (key = 13) and (entityss >= 0) then
 			lblsinit;
 			while getmode ('remove from Selection Set', ssmode, key) = res_normal do
 				addr := ent_first (ssmode);
@@ -1189,13 +1383,124 @@ BEGIN
            end;
  				END;
 			end;
-		elsif (key = s8) then
+		elsif (key = 18) then
 			SelectEntTypes;
 		end;
 	until false;
 END UserSelectSS;
 
-
+{*}
+PROCEDURE HilightSettings;
+BEGIN
+	REPEAT
+		wrtlvl ('Hilite Settings');
+		lblsinit;
+		lblsett (1, 'Hilite Entities', hlent);
+		if hlent then
+			lblset (2, 'Colour');
+			GetClrName (hlentclr, tempstr);
+			strins (tempstr, 'Entities highlight colour is ', 1);
+			lblmsg (2, tempstr);
+			lblsett (3, 'Increased Wgt', hlentWgt);
+			lblmsg (3, 'Highlight entities with increased weight');
+			lblsett (4, 'Solid Lines', not hlentdash);
+			lblmsg (4, 'Highlighted entities will be shown with solid lines');
+			lblsett (5, 'Dashed Lines', hlentdash);
+			lblmsg (5, 'Highlighted entities will be shown with dashed lines');
+			if hlentdash then
+				lblset (6, 'Line Spacing');
+				cvintst (hlentpx, tempstr);
+				strins (tempstr, 'Line spacing in pixels for highlighted entities (', 1);
+				strcat (tempstr, ')');
+				lblmsg (6, tempstr);
+			end;
+			lblset (8, 'Show Entities');
+			lblmsg (8, 'Highlight the shadow entities using the appropriate settings');
+		end;
+		lblsett (11, 'Hilite Surf', hlsurf);
+		if hlsurf then
+			lblset (12, 'Colour');
+			GetClrName (hlsurfclr, tempstr);
+			strins (tempstr, 'Surface highlight colour is ', 1);
+			lblmsg (12, tempstr);
+			lblsett (13, 'Increased Wgt', hlsurfWgt);
+			lblmsg (13, 'Highlight surface with increased weight');
+			lblsett (14, 'Solid Lines', not hlsurfdash);
+			lblmsg (14, 'Highlighted surface will be shown with solid lines');
+			lblsett (15, 'Dashed Lines', hlsurfdash);
+			lblmsg (15, 'Highlighted surface will be shown with dashed lines');
+			if hlsurfdash then
+				lblset (16, 'Line Spacing');
+				cvintst (hlsurfpx, tempstr);
+				strins (tempstr, 'Line spacing in pixels for highlighted surface (', 1);
+				strcat (tempstr, ')');
+				lblmsg (16, tempstr);
+			end;
+			if not zplane then
+				lblset (18, 'Show Surface');
+				lblmsg (18, 'Highlight the surface using the appropriate settings');
+			else
+				lblset (18, 'Cannot show');
+				lblmsg (18, 'Shadow surface is currently z height (not an entity) and cannot be shown');
+			end;
+		end;
+		lblset (20, 'Exit');
+		lblmsg (20, 'Return to the main Shadow menu');
+		lblson;
+		
+		getesc (key);
+		if key = f1 then
+			hlent := not hlent;
+			SaveBln ('HiliteEnt', hlent, true);
+		elsif (key = f2) and hlent then	
+			wrtmsg ('Select highlight colour for entities');
+			getclr (hlentclr);
+			SaveInt ('HLEntClr', hlentclr, true);
+		elsif (key = f3) and hlent then
+			hlentwgt := not hlentwgt;
+			SaveBln ('HLEntWeight', hlentwgt, true);
+		elsif (key= f4) and hlent then
+			hlentdash := false;
+			SaveBln ('HLEntDash', hlentdash, true);
+		elsif (key = f5) and hlent then
+			hlentdash := true;
+			SaveBln ('HLEntDash', hlentdash, true);
+		elsif (key = f6) and hlentdash and hlent then
+			wrtmsg ('Entity Dash Pixels: ');
+			getint (hlentpx);
+			SaveInt ('HLEntDashSpace', hlentpx, true);
+		elsif (key = f8) and hlent then
+			HighlightSS (EntitySS, true, false);
+		elsif (key = s1) then
+			hlsurf := not hlsurf;
+			SaveBln ('HiliteSurf', hlsurf, true);
+		elsif (key = s0) then
+			return;
+		elsif hlsurf then
+			if key = s2 then
+				wrtmsg ('Select highlight colour for surface');
+				getclr (hlsurfclr);
+				SaveInt ('HLSurfClr', hlsurfclr, true);
+			elsif key = s3 then
+				hlsurfWgt := not hlsurfWgt;
+				SaveBln ('HLSurfWeight', hlsurfWgt, true);
+			elsif key = s4 then
+				hlsurfdash := false;
+				SaveBln ('HLSurfDash', hlsurfdash, true);
+			elsif key = s5 then
+				hlsurfdash := true;
+				SaveBln ('HLSurfDash', hlsurfdash, true);
+			elsif (key=s6) and hlsurfdash then
+				wrtmsg ('Surface Dash Pixels: ');
+				getint (hlsurfpx);
+				SaveInt ('HLSurfDashSpace', hlsurfpx, true);
+			elsif (key = s8) and not zplane then
+				HighlightEnt (surface, true, true);		
+			end;			
+		end;
+	UNTIL false;
+END HilightSettings;
+{*}
 
 PROCEDURE SetShadSymbolName (symname : IN OUT symstr);
 !!! Create a suitable name for the symbol. Make the name as informative as possible so that useful information is 
@@ -1325,7 +1630,7 @@ BEGIN
 	if colour >= 0 or colour < -1000 then
 		shad.color := entclr;
 	end;
-	if DC191 and (not isvoid) then
+	if DC191 and {*(not isvoid) and*} doCover then
 		PlinCovered(shad, true);
 	end;
 	MyLogStr ('About to add pln to drawing');
@@ -1641,6 +1946,14 @@ BEGIN
 	return 1;		! shouldn't actually ever get here ...
 END CreateTrimmedPln;
 
+FUNCTION PlyHasVoid (ent : entity) : boolean;
+VAR
+	v_addr : entaddr;
+	v_ent	 : entity;
+BEGIN
+	v_addr := ent.plyfrstvoid;
+	return void_get (v_ent, v_addr);
+END PlyHasVoid;
 
 PROCEDURE GenShadows;
 VAR
@@ -1669,6 +1982,10 @@ VAR
 	entnum		: integer;
 	VoidsDone	: boolean;
 	bigply		: boolean;
+	templyr 	: layer;
+	tempmode 	: mode_type;
+	tempaddr	: entaddr;
+	tempbln		: boolean;
 
 	FUNCTION Cast (castent : IN entity; shad : IN OUT entity; isvoid : boolean) : boolean;
 	!!! calculates shadow for ent and returns the shadow in shad. 
@@ -1682,6 +1999,7 @@ VAR
 		temppnt		: point;
 		tempent		: entity;
 	BEGIN
+		MyLogStr ('Cast start');
 		! do not cast a shadow for the surface in case it is in the entity set
 		if castent.addr = shadow.addr then
 			MyLogStr ('Skipping surface polygon');
@@ -1703,6 +2021,7 @@ VAR
 		
 		tempent := castent;
 		if tempent.enttype = entply and tempent.plynpnt > 36 then
+			LogStrInt ('ply with too many sides', tempent.plynpnt);			
 			tempent.plynpnt := 36;	! DataCAD 14 onwards supports polygons with > 36 sides, but DCAL only supports 36
 			bigply := true;
 		end;
@@ -1853,7 +2172,7 @@ BEGIN
 	elsif (not zplane) and not ss then
 		msg_OK ('Please select a shadow surface');	! I don't think this can ever happen, but just in case ...
 		return;
-	elsif not (doPly or doLin or doLn3) then
+	elsif not (doLin or doLn3 or do2DCurves or doBasic3D or do3DCurvSurf or doPln or doText or doSym or doDim) then
 		DisplayVerboseMsg (2, '');
 		return;
 	end;
@@ -1907,10 +2226,7 @@ BEGIN
 	VoidsDone := false;
 	bigply := false;
 	WHILE ent_get (ent, addr) and shadowcreated < 32750 DO
-		IF (ent.addr <> surface.addr) and 
-			 (((ent.enttype = entply) and doPly) or 
-			  ((ent.enttype = entlin) and doLin) or 
-				((ent.enttype = entln3) and doLn3))THEN
+		IF ProcessThisEnt (ent) then
 			entnum := entnum+1;
 			IF showprogress THEN
 				cvintst (entnum, str);
@@ -1925,23 +2241,80 @@ BEGIN
 			else
 				entclr := ent.color;
 			end;
-
-			ssClear (ssNum);
-			IF Cast (ent, shadow, false) THEN
-				MyLogStr ('Shadow cast ok');
-				shadowcreated := shadowcreated+1;
-				if ent.enttype = entply and (DC191 or hatchlines<>5)  then
-					! process any voids
-					v_addr := ent.plyfrstvoid;
-					WHILE void_get (v_ent, v_addr) DO
-						MyLogStr ('Processing void');
-						VoidsDone := true;
-						b := Cast (v_ent, v_shad, true);
-						v_addr := v_ent.next;
-					END;
+			
+			if (ent.enttype = entlin) or (ent.enttype = entln3) or ((ent.enttype = entply) and ((not PlyHasVoid(ent)) or DC191 or (HatchLines = 0))) then
+				ssClear (ssNum);
+				IF Cast (ent, shadow, false) THEN
+					MyLogStr ('Shadow cast ok');
+					shadowcreated := shadowcreated+1;
+					if ent.enttype = entply and (DC191 or hatchlines<>5)  then
+						! process any voids
+						v_addr := ent.plyfrstvoid;
+						WHILE void_get (v_ent, v_addr) DO
+							MyLogStr ('Processing void');
+							VoidsDone := true;
+							b := Cast (v_ent, v_shad, true);
+							v_addr := v_ent.next;
+						END;
+					end;
+				END;
+			elsif ent.enttype <> entcnt then
+				MyLogStr ('Creating TempLyr');
+				lyr_init (templyr);
+				if (ent.enttype = entar3) or 
+					 ((ent.enttype = entbez) and realEqual(ent.BezBase, ent.BezHite, ABSZero)) or
+					 ((ent.enttype = entcrc) and realEqual(ent.crcBase, ent.crcHite, ABSZero)) or
+					 ((ent.enttype = entarc) and realEqual(ent.arcBase, ent.arcHite, ABSZero)) or
+					 ((ent.enttype = entell) and realEqual(ent.ellBase, ent.ellHite, ABSZero)) or
+					 ((ent.enttype = entbsp) and realEqual(ent.BspBase, ent.BspHite, ABSZero)) then 
+					tempbln := false; ! I know that all of the above will only explode into lines, so don't bother trying to explode to polygons
+				else
+					tempbln := ent_explode (ent, templyr, 1);
+					if tempbln then 
+						mode_init (tempmode);
+						mode_1lyr (tempmode, templyr);
+						tempaddr := ent_first (tempmode);
+						if not ent_get (tempent, tempaddr) then
+							tempbln := false; ! no polygons were created; try exploding to lines
+						elsif ((ent.enttype = entcyl) and (ent.cyldiv <= 36) and ent.cylClose) or 
+								  ((ent.enttype = entcon) and (ent.condiv <= 36) and ent.conclose) or 
+									((ent.enttype = enttrn) and (ent.trndiv <= 36) and ent.trnclose) then
+							! DataCad wrongly explodes some of the closing polygons for these entities with more than 36 points - get rid of the extra points
+							repeat
+								if ent_get (tempent, tempaddr) and (tempent.enttype = entply) and (tempent.plynpnt > 36) then
+									tempent.plynpnt := 36;
+									ent_update (tempent);
+								end;
+								tempaddr := ent_next (tempent, tempmode);
+							until isnil (tempaddr);
+						end;
+					end;
 				end;
-			END;
-
+				if not tempbln then 
+					tempbln := ent_explode (ent, templyr, 0);
+				end;
+				if tempbln then
+					MyLogStr ('Temp entities created');
+					ssClear (ssNum);
+					mode_init (tempmode);
+					mode_1lyr (tempmode, templyr);
+					tempaddr := ent_first (tempmode);
+					tempbln := false;
+					while ent_get (tempent, tempaddr) do
+						tempaddr := ent_next (tempent, tempmode);
+						IF Cast (tempent, shadow, false) then
+							MyLogStr ('Temp Shadow cast ok');
+							tempbln := true;
+						END;
+					end;
+					if tempbln then
+						shadowcreated := shadowcreated+1;
+					end;
+				else
+					MyLogStr ('Explode Failed');
+				end;
+				lyr_term (templyr);
+			end;
 			! Add Hatch
 			if hatchlines > 0 and hatchlines < 4 then
 				mode_init (mode);
@@ -1956,7 +2329,7 @@ BEGIN
 					j := 0;
 					hatch_mode (mode, sl, 0.0, 0.0, origin, 0.0, 1.0, htype_normal, lyr, hmin, hmax, false, j, false);
 				end;
-			end;
+			end;	
 			ssClear (ssNum);
 
 		END;
@@ -1990,6 +2363,19 @@ BEGIN
 		SetShadSymbolName (symname);
 		mode_init (shadmode);
 		mode_group (shadmode, shadow);
+		if (hatchlines > 0) and (hatchlines < 4) and hatchonly then
+			ssClear (ssNum);
+			addr := ent_first (shadmode);
+			while ent_get (ent, addr) do
+				if ent.enttype <> entlin then
+					ssAdd (ssNum, ent);
+				end;
+				addr := ent_next (ent, shadmode);
+			end;
+			mode_init (shadmode);
+			mode_group (shadmode, shadow);
+			mode_enttype(shadmode, entlin);
+		end;
 		if showprogress then
 			wrtmsg ('Creating Symbol');
 		end;
@@ -1998,6 +2384,18 @@ BEGIN
 		setpoint (ref, 0.0);
 		sym_create (sym, shadmode, ref, symname, true, true);
 		MyLogStr ('Symbol created, creating symbol entity');
+		if (hatchlines > 0) and (hatchlines < 4) and hatchonly then
+			mode_init (shadmode);
+			mode_ss(shadmode, ssNum);
+			addr := ent_first (shadmode);
+			while ent_get (ent, addr) do
+				ent_draw (ent, drmode_black);
+				ent_del (ent);
+				addr := ent_next (ent, shadmode);
+			end;
+			ssClear (ssNum);
+		end;
+
 		ent_init (shadow, entsym);
 		shadow.symname := symname;
 		shadow.symmod := invmat;
@@ -2046,32 +2444,68 @@ BEGIN
 END GetSpecColour;
 
 PROCEDURE GetShadowLyr;
+VAR
+	CurrLyrFlag : boolean;
+	tempent : entity;
 BEGIN
+{*	wrtmsg ('Enter layer to create shadows on: ');
+	GetLyr (lyr);	
+	getlyrname (lyr, lyrname);
+
+	CurrLyrFlag := (strlen(lyrname) = 0);
+	GetLyrCurExistNew ('Shadow Layer', 'Enter layer to create shadows on: ', lyr, CurrLyrFlag, 80);	
+	if CurrLyrFlag then
+		lyrname := '';
+	else
+		getlyrname (lyr, lyrname);
+	end;
+	*}
+	
+{*
 	if strlen(lyrname) > 0 then
 		lyrname := '';
 		return;
-	end;
-	lblsinit;
-	lblson;
-	wrtmsg ('Enter layer to create shadows on: ');
-	if DC190 then
-		getstr (lyrname, 80);
-	else
-		getstr (lyrname, 8);
-	end;
-	if blankstring(lyrname) then
-		lyrname := '';
-		return;
-	end;
-	if not lyr_find (lyrname, lyr) then
-		if not Lyr_Create19 (lyrname, lyr, DC190) then
-			msg_OK ('Unable to find or create layer');
-			lyrname := '';
+	end;  *}
+	repeat
+		wrtlvl ('Shadow Layer');
+		lblsinit;
+		lblset (1, 'Lyr Menu');
+		lblmsg (1, 'Choose from layer menu (short layer names only)');
+		lblset (20, 'Exit');
+		lblson;
+		wrtmsg ('Enter name of new or existing layer : ');
+		if DC190 then
+			res := dgetstr (lyrname, 80, key);
+		else
+			res := dgetstr (lyrname, 8, key);
 		end;
-	end;
+		if res = res_escape then
+			if key = f1 then
+				GetLyr (lyr);
+				getlyrname (lyr, lyrname);
+				return;
+			elsif key = s0 then
+				return;
+			end;
+		end;
+		if blankstring(lyrname) then
+			!nothing
+		end;
+		if lyr_find (lyrname, lyr) then
+			return;
+		elsif Lyr_Create19 (lyrname, lyr, DC190) then
+			return;
+		else
+			msg_OK ('Unable to find or create layer');
+		end;
+	until false;
+{*}
 END GetShadowLyr;
 
 PROCEDURE HatchSettings;
+VAR
+	SvSpace : real;
+	hatchspaceok : boolean;
 BEGIN
 	repeat
 		SaveInt ('ShadHatchClr', hatchclr, true);
@@ -2085,9 +2519,11 @@ BEGIN
 		lblmsg (3, 'Hatch with 2 sets of parallel lines at right angles to each other');
 		lblsett (4, 'Net3', hatchlines = 3);
 		lblmsg (4, 'Hatch with 3 sets of parallel lines at 60 degrees to each other');
-		lblsett (6, 'Solid Fill', hatchlines = 5);
-		lblmsg (6, 'Fill shadows with solid fill (same colour as outline)');
+{*		lblsett (6, 'Solid Fill', hatchlines = 5);
+		lblmsg (6, 'Fill shadows with solid fill (same colour as outline)');  *}
 		if hatchlines > 0 and hatchlines < 5 then
+			lblsett (6, 'Hatch ONLY', hatchonly);
+			lblmsg (6, 'Draw the hatch only (do NOT draw any shadow outlines)');
 			lblsett (9, 'Outln Clr', hatchclr < 0);
 			lblmsg (9, 'Hatch the same colour as the shadow outlines');
 			lblsett (10, 'Set Clr', hatchclr >= 0);
@@ -2115,21 +2551,37 @@ BEGIN
 		lblson;
 		
 		getesc (key);
-		if (key >= f1)and (key <= F6) and (key <> f5) then
-			hatchlines := key-f1;
+		if (key >= f1)and (key <= F4) then
+			hatchlines := fnkeyconv(key)-1;
 			SaveInt ('ShadHtchLins', hatchlines, true);
 		elsif key = s0 then
 			return;
 		elsif hatchlines > 0 then
-			if key = f9 then
+			if key = f6 then
+				hatchonly := not hatchonly;
+				SaveBln ('ShadHtchOnly', hatchonly, false);
+			elsif key = f9 then
 				hatchclr := -absi(hatchclr);
 			elsif key = f0 then
 				hatchclr := absi(hatchclr);
 				getclr (hatchclr);
 			elsif (hatchlines < 4) then
 				if (key = s2) then
-					wrtmsg ('Enter hatch spacing: ');
-					getdis (hatchspace);
+					repeat
+						wrtmsg ('Enter hatch spacing: ');
+						SvSpace := hatchspace;
+						getdis (hatchspace);
+						if hatchspace < 0.0 then
+							hatchspace := -hatchspace;
+						end;
+						if (hatchspace < 1.0) then
+							hatchspace := SvSpace;
+							msg_ok ('Hatch spacing too small.  Must be at least 1/32" (0.8mm).');
+							hatchspaceok := false;
+						else
+							hatchspaceok := true;
+						end;
+					until hatchspaceok;
 					wrtmsg ('');
 					SaveRl ('ShadHtchSpcg', hatchspace, true);
 				elsif key = s3 then
@@ -2149,12 +2601,12 @@ VAR
 	r	: real;
 	s : str80;
 BEGIN
-	namever :='Shadow v1.0   Copyright D Henderson 2017.';
+	namever :='Shadow v1.1.08   Copyright D Henderson 2017.';
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
 	showprogress := false; ! disabled as update of progress display was unreliable, even though processing was proceeding ok
 	
-	initSettings ('Shadow.ini');
+	initSettings ('Shadow');
 	InitLog ('Shadow');
 
 	north := GetSvdAng ('ShadowNorth', halfpi);
@@ -2169,7 +2621,11 @@ BEGIN
 	colour := GetSvdInt ('ShadColour', -1);
 	hatchclr := GetSvdInt('ShadHatchClr', -1);
 	hatchlines := GetSvdInt ('ShadHtchLins', 0);
-	if scaletype < 6 then
+	if (hatchlines > 0) and (hatchlines < 5) then
+		hatchlines := 0;		!disable hatch in this version as it is not reliable
+	end;
+	hatchonly := GetSvdBln ('ShadHtchOnly', false);
+	if (scaletype < 6) and (scaletype <> 3) then
 		r := 192.0;	! default to 6 inches
 	else
 		r := 188.9763779527559;	! default to 15cm
@@ -2223,7 +2679,7 @@ BEGIN
 			strcat (tempstr, 'saved, and you will not be asked again');
 			msg_OK (tempstr);
 			DC190 := true;
-			if DCVer >= 31683.3583333 * 6.0 then
+			if DCVer >= 31683.33 * 6.0 then
 				DC191 := true;
 			end;
 		elsif res = 2 then
@@ -2248,8 +2704,22 @@ BEGIN
 		if DCVer >= 31683.33 * 6.0 then
 			DC191 := true;
 		end;
+
 	end;
 	VoidRegen := GetSvdBln ('VoidRegen', false);
+	doCover := GetSvdBln ('doCover', true);
+
+	hlent := GetSvdBln ('HiliteEnt', true);
+	hlentWgt := GetSvdBln ('HLEntWeight', true);
+	hlentclr := GetSvdInt ('HLEntClr', clrltgray);
+	hlentdash := GetSvdBln ('HLEntDash', true);
+	hlentpx := GetSvdInt ('HLEntDashSpace', 13);
+	hlsurf := GetSvdBln ('HiliteSurf', true);
+	hlsurfclr := GetSvdInt ('HLSurfClr', clrltgray);
+	hlsurfWgt := GetSvdBln ('HLSurfWeight', true);
+	hlsurfdash := GetSvdBln ('HLSurfDash', true);
+	hlsurfpx := GetSvdInt ('HLSurfDashSpace', 26);
+	
 END Initialise;
 
 BEGIN
@@ -2283,34 +2753,13 @@ BEGIN
 		lblset (5, 'Entities');
 		if entityss >=0 then
 			ssGetName (entityss, tempstr);
-			tempbln := false;
-			if not doPly then
-				strcat (tempstr, ', exclude Ply');
-				tempbln := true;
-			end;
-			if not doLin then
-				if not tempbln then
-					strcat (tempstr, ', exclude 2D Lin');
-					tempbln := true;
-				else
-					strcat (tempstr, ', 2D Lin');
-				end;
-			end;
-			if not doLn3 then
-				if not tempbln then
-					strcat (tempstr, ', exclude 3D Lin');
-					tempbln := true;
-				else
-					strcat (tempstr, ', 3D Lin');
-				end;
-			end;
-			
-			strins (tempstr, ' (', 1);
-			strcat (tempstr, ')');
+			strcat (tempstr, ': ');
+			EntTypesStr (tempstr);
 		else
-			tempstr := ' ';
+			tempstr := 'not set';
 		end;
-		strins (tempstr, 'Select entities to cast shadows', 1);
+		strins (tempstr, 'Select entities to cast shadows (', 1);
+		strcat (tempstr, ')');
 		lblmsg (5, tempstr);
 
 		lblset (6, 'Hilite');
@@ -2321,6 +2770,9 @@ BEGIN
 		if zplane then
 			strcat (tempstr, 'horizontal plane at ');
 			cvdisst (zheight, str);
+			if zheight < 0.0 then
+				strcat (tempstr, '-');
+			end;
 			strcat (tempstr, str);
 			strcat (tempstr, ')');
 		else
@@ -2333,7 +2785,10 @@ BEGIN
 			lblmsg (8, 'Trim Shadow to surface polygon');
 		end;
 		
-		lblsett (10, 'Hatch', hatchlines > 0);
+		lblsett (10, 'Solid Fill', hatchlines = 5);
+		lblmsg (10, 'Solid Fill the shadows');
+		{*
+		lblsett (12, 'Hatch', (hatchlines>0) and (hatchlines<4));
 		tempstr := 'Hatch the shadows';
 		if hatchlines = 1 then
 			strcat (tempstr, ' (single lines)');
@@ -2341,10 +2796,21 @@ BEGIN
 			strcat (tempstr, ' (Cross Hatch)');
 		elsif hatchlines = 3 then
 			strcat (tempstr, ' (Net3)');
-		elsif hatchlines = 5 then
-			strcat (tempstr, ' (Solid Fill)');
 		end;
-		lblmsg (10, tempstr);
+		if (hatchlines) > 0 and (hatchlines < 4) and (hatchclr >= 0) then
+			GetClrName (hatchclr, str);
+			strins (str, ', ', 1);
+			strins (tempstr, str, strlen(tempstr));
+			if hatchonly then
+				strins (tempstr, 'Hatch ONLY. ', 1);
+			end;
+		end;
+		lblmsg (12, tempstr);
+*}
+		if DC191 then
+			lblsett (11, 'Cover', doCover);
+			lblmsg (11, 'Add a cover to shadow polylines');
+		end;
 		
 		lblsett (13, 'Spec Clr', colour >= 0);
 		tempstr := 'Specify a colour to draw shadows';
@@ -2359,24 +2825,27 @@ BEGIN
 		lblsett (14, 'Curr Clr', colour < 0 and colour > -1000);
 		lblmsg (14, 'Shadows will be drawn in the current colour');
 		
-		lblsett (15, 'Ent Clr', colour < -1000);
+{*		lblsett (15, 'Ent Clr', colour < -1000);
 		lblmsg (15, 'Shadow will be drawn the same colour as the entity casting it');
-		
-		lblsett (16, 'Layer', strlen(lyrname) > 0);
-		tempstr := 'Lyr to draw shadows on (';
+*}		
+		lblsett (15, 'Spec Layer', strlen(lyrname) > 0);
+		tempstr := 'Specify a layer to draw shadows on (';
 		if strlen (lyrname) > 0 then
 			strcat (tempstr, lyrname);
 		else
-			strcat (tempstr, 'currently not set');
+			strcat (tempstr, 'active layer');
 		end;
 		strcat (tempstr, ')');
-		lblmsg (16, tempstr);
+		lblmsg (15, tempstr);
+		
+		lblsett (16, 'Active Layer', strlen(lyrname) = 0);
+		lblmsg (16, 'Draw shadows on the currently active layer');
 
 		lblset (18, 'Start');
 		lblmsg (18, 'Generate shadows for selected entities');
 
-		lblset (19, 'Documentation');
-		lblmsg (19, 'Display the instruction document for this macro.');
+		lblset (19, 'Help / About');
+		lblmsg (19, 'Display information about this macro, and a link to the Instruction Document.');
 		
 		lblset (20, 'Exit');
 
@@ -2384,7 +2853,9 @@ BEGIN
 		
 		getesc (key);
 		IF key = s9 THEN
-			ExecAndWait ('ShadHelp.exe', 1, res);
+			getpath (tempstr, pathsup);
+			strcat (tempstr, 'dhsoftware\\ShadHelp.exe');
+			ExecAndWait (tempstr, 1, res);
 			if res <> 0 then
 				beep;
 			end;
@@ -2399,8 +2870,7 @@ BEGIN
 		ELSIF key = f5 THEN
 			UserSelectSS;
 		ELSIF key = F6 THEN
-			HighlightSS (EntitySS, true, false);
-			HighlightEnt (surface, true, true);
+			HilightSettings;
 		ELSIF key = f7 THEN
 			GetSurface;
 		ELSIF key = f8 THEN
@@ -2409,7 +2879,23 @@ BEGIN
 				SaveBln ('ShadTrim', trim, true);
 			end;
 		ELSIF key = f0 THEN
+			if HatchLines = 5 then
+				HatchLines := 0;
+			else
+				HatchLines := 5;
+			end;
+			SaveInt ('ShadHtchLins', hatchlines, true);
+{* disable hatch in this version as it is unreliable
+		ELSIF key = s2 THEN
+			if HatchLines > 3 then
+				HatchLines := 0;
+			end;
 			HatchSettings;
+			SaveInt ('ShadHtchLins', hatchlines, true);
+*}
+		ELSIF key = s1 THEN
+			doCover := not doCover;
+			SaveBln ('DoCover', doCover, true);
 		ELSIF key = s3 THEN
 			GetSpecColour;
 		ELSIF key = s4 THEN
@@ -2418,14 +2904,16 @@ BEGIN
 				colour := colour+1000;
 			end;
 			SaveInt ('ShadColour', colour, true);
-		ELSIF key = s5 THEN
+{*		ELSIF key = s5 THEN
 			colour := -absi(colour);
 			if colour > -1000 then
 				colour := colour-1000;
 			end;
-			SaveInt ('ShadColour', colour, true);
-		ELSIF key = s6 THEN
+			SaveInt ('ShadColour', colour, true);	*}
+		ELSIF key = s5 THEN
 			GetShadowLyr;
+		ELSIF key = s6 THEN	
+			lyrname := '';
 		ELSIF key = s8 THEN
 			GenShadows;
 {		ELSIF key = s9 THEN

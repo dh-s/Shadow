@@ -1,0 +1,13 @@
+v1.1.01
+Added processing for the vast majority of entity types (still cannot cast shadows for smart entities).	
+Fixed menu level display and prompt in the Entity Types menu
+Changed option s9 on the main menu to display an 'About' form with a link to the instruction document.
+Fixed the dispay of negative z values in the label message for Fixed Z shadow surface.
+Remove hatch options (except for Solid Fill which now appears on the main menu in place of the Hatch button)
+Added Cover button on main menu (only appears for DataCad 19.01 onwards) to control whether a cover is created for the shadow polyline
+Fixed a problem where the polyline cover could extend over voids
+Removed Ent Clr option
+Added ability to process void fill correctly in all DataCAD versions
+
+1.1.06
+Fixed highlighting of symbols

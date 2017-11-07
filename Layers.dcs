@@ -1,0 +1,160 @@
+MODULE Layers;
+
+! # INCLUDE 'Language.inc'
+
+PROCEDURE msg_OK (msg : str255); BUILTIN 245;
+PROCEDURE lblsettf (KeyNum : integer; str : string; state : integer); BUILTIN 633;
+
+CONST
+	lScrollFwd = 34;
+	lScrollBack = 35;
+	lActive = 36;
+	lNewLyr = 37;
+	mNewLyr = 8;
+
+VAR
+	iniFileName	: str255;
+	ident				: str255;
+	section			: str255;
+	atr					: attrib;
+	initialised	: boolean;
+
+
+
+PROCEDURE GetLyrCurExistNew (lprompt : string; llbl : string; lyr : IN OUT layer; CurrLyrFlag : IN OUT boolean; MaxNameLen : integer); PUBLIC;
+VAR
+	tempstr : str255;
+	lyrs		: array [1..19] of layer;
+	templyr : layer;
+	i, j		: integer;
+	offset	: integer;
+	forward : boolean;
+	key			: integer;
+BEGIN
+	Offset := 0;
+	REPEAT
+		lblsinit;
+		wrtlvl (llbl);
+		if Offset = 0 then
+			lblsett (1, 'Active Layer', CurrLyrFlag);
+			lblset (2, 'New Layer');
+			
+			lyrs[4] := lyr_first;
+			i := 4;
+			repeat
+				lyrs[i+1] := lyr_next (lyrs[i]);
+				i := i+1;
+			until (i = 19) or lyr_nil (lyrs[i]);
+			if (i< 19) then 
+				forward := false;
+				for j := i+1 to 19 do
+					lyrs[j] := lyrs[i];		!i.e. set to nil
+				end;
+			elsif lyr_nil(lyrs[19]) then
+				forward := false;
+			else
+				forward := true;
+			end;
+			for j := 5 to 15 do
+				if not lyr_nil (lyrs[j]) then
+					getlyrname (lyrs[j], tempstr);
+					lblmsg (j, tempstr);
+					if lyr_ison (lyrs[j]) then
+						if lyrs[j] = getlyrcurr then						
+							lblsettf (j, tempstr, 3);
+						else
+							lblsett (j, tempstr, true);
+						end;
+					else
+						lblset (j, tempstr);
+					end;
+				end;
+			end;
+			if forward then
+				lblset (18, 'Scroll Forward');
+			else
+				if i > 16 then
+					for j := 16 to (i-1) do
+						getlyrname (lyrs[j], tempstr);
+						lblmsg (j, tempstr);
+						if lyr_ison (lyrs[j]) then
+							if lyrs[j] = getlyrcurr then						
+								lblsettf (j, tempstr, 3);
+							else
+								lblsett (j, tempstr, true);
+							end;
+						else
+							lblset (j, tempstr);
+						end;					
+					end;
+				end;
+			end;
+		else
+			templyr := lyr_first;
+			for i := 1 to (offset*16 - 4) do
+				templyr := lyr_next(templyr);
+			end;
+			lyrs[1] := lyr_next(templyr);
+			i := 2;
+			repeat
+				lyrs[i+1] := lyr_next (lyrs[i]);
+				i := i+1;
+			until (i = 18) or lyr_nil (lyrs[i]);
+			if i < 18 then
+				forward := false;
+				for j := i+1 to 19 do
+					lyrs[j] := lyrs[i];		!i.e. set nil
+				end;
+			elsif lyr_nil(lyrs[18]) then
+				forward := false;
+			else
+				forward := true;
+			end; 	
+		end;
+		lblson;
+		wrtmsg (lprompt);
+		getesc (key);
+		if key = s0 then
+			if CurrLyrFlag then 
+				return;
+			elsif not lyr_nil(lyr) then
+				return;
+			else
+				CurrLyrFlag := true;
+				return;
+			end;
+		elsif (key=f1) and (offset=0) then
+			CurrLyrFlag := true;
+			return;
+		elsif (key=f2) and (offset=0) then
+			lblsinit;
+			lblson;
+			wrtmsg ('Enter new layer name: ');
+			repeat
+				getstr (tempstr, MaxNameLen);
+			until lyr_create (tempstr, lyr);
+		elsif (fnkeyconv(key) >=1) and (fnkeyconv(key)<= 16) then
+			if not lyr_nil(lyrs[fnkeyconv(key)]) then
+				lyr := lyrs[fnkeyconv(key)];
+				return;
+			end;
+		elsif (key = 17) and (not forward) then
+			if not lyr_nil(lyrs[17]) then
+				lyr := lyrs[17];
+				return;
+			end;
+		elsif (key = 18) and (not forward) and (offset=0) then
+			if not lyr_nil(lyrs[18]) then
+				lyr := lyrs[18];
+				return;
+			end;
+		elsif (key=18) then
+			offset := offset+1;
+		elsif (key=19) and (offset > 0) then
+			offset := offset-1;
+		end;
+	UNTIL FALSE;
+END GetLyrCurExistNew;
+
+
+END Layers.

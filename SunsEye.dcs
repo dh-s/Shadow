@@ -81,7 +81,7 @@ BEGIN
 	
 	! setup the new view
 	view_init (view);
-	view_calcpara (view, viewcent, north+azimuth-pi, -altitude, scalenum);
+	view_calcpara (view, viewcent, north-azimuth-pi, -altitude, scalenum);
 	
 	! add new view to the drawing		NOTE: as far as I can see, view_setcurr should work without 
 	! adding the view to the dwg, but this did not seem to work ...

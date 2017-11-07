@@ -1,0 +1,5 @@
+This macro has been tested with DataCAD versions 10, 11, and 19. It should be compatible with future version of DataCAD, and will most likely work with versions earlier than those tested.
+
+A small amount of functionality in the macro requires DataCAD version 19.01.00.15 or greater, but the macro in general will work with earlier versions as noted in the above paragraph.
+
+The macro has also been tested with Spirit, and whilst some features work it is known not to be stable when used with Spirit.  It's use with Spirit is not recommended.

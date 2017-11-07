@@ -17,8 +17,10 @@ VAR
 
 PROCEDURE InitSettings (iniName : string);		PUBLIC;
 BEGIN
-		getpath (iniFileName, pathmcr);
+		getpath (iniFileName, pathsup);
+		strcat (iniFileName, 'dhsoftware\\');
 		strcat (iniFileName, iniName);
+		strcat (iniFileName, '.ini');
 		section := 'General';
 		initialised := true;
 END InitSettings;
@@ -147,6 +149,7 @@ BEGIN
 		sval := 'true';
 	else
 		sval := 'false';
+		ival := 0;
 	end;
 	if atr_sysfind (name, atr) then
 		atr.int := ival;
@@ -158,8 +161,6 @@ BEGIN
 		atr_add2sys (atr);
 	end;
 	if toini then
-		getpath (iniFileName, pathmcr);
-		strcat (iniFileName, 'Shadow.ini');
 		strassign (ident, name);
 		writeIniStr (iniFileName, section, ident, sval);
 	end;
@@ -206,11 +207,15 @@ END SaveIniStr;
 PROCEDURE SaveStr (name : string;  value : string; toini : boolean);		PUBLIC;
 BEGIN
 	if atr_sysfind (name, atr) then
-		atr.str := value;
-		atr_update (atr);
+		if atr.atrtype = atr_str then
+			strassign (atr.str, value);
+			atr_update (atr);
+		else
+			atr_delsys (atr);
+		end;
 	else
 		atr_init (atr, atr_str);
-		atr.name := name;
+		strassign (atr.name, name);
 		strassign (atr.str, value);
 		atr_add2sys (atr);
 	end;
