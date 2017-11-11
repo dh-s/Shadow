@@ -48,6 +48,7 @@ CONST
 VAR
 	DCVer		: real;		! 190001.0 for Dcad 19
 	DC191, DC190 : boolean;
+	ver				: str8;
 	namever		: string(100);
 	mat, invmat		: modmat;
 	north		: real;
@@ -2589,7 +2590,11 @@ VAR
 	r	: real;
 	s : str80;
 BEGIN
-	namever :='Shadow v1.1.08   Copyright D Henderson 2017.';
+	ver := 'v1.1.08';
+	namever := 'Shadow ';
+	strcat (namever, ver);
+	strcat (namever, '   Copyright D Henderson 2017.');
+	!namever :='Shadow v1.1.08   Copyright D Henderson 2017.';
 	supressinfo := false;
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
@@ -2859,7 +2864,8 @@ BEGIN
 		getesc (key);
 		IF key = s9 THEN
 			getpath (tempstr, pathsup);
-			strcat (tempstr, 'dhsoftware\\ShadHelp.exe');
+			strcat (tempstr, 'dhsoftware\\ShadHelp.exe ');
+			strcat (tempstr, ver);
 			ExecAndWait (tempstr, 1, res);
 			if res <> 0 then
 				beep;
