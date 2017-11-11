@@ -110,6 +110,7 @@ VAR
 	hlsurfWgt	: boolean;
 	hlsurfdash: boolean;
 	hlsurfpx	: integer;
+	supressinfo: boolean;
 	
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
 FUNCTION msg_dlg (msg : str255; msgDlgType, msgDlgButtons : integer) : integer; BUILTIN 246;
@@ -131,22 +132,7 @@ PROCEDURE MyLogStr (str : string);
 BEGIN
 	LogStr (str);
 END MyLogStr;
-{
-PROCEDURE RemoveChars (str : IN OUT string; CharsToRemove : string);
-VAR
-	ndx, pos		: integer;
-	pat				: string(1);
-BEGIN
-	FOR ndx := 1 to strlen(CharsToRemove) DO
-		strsub(CharsToRemove, ndx, 1, pat);
-		pos := strpos (pat, str, 1);
-		WHILE pos > 0 DO
-			strdel (str, pos, 1);
-			pos := strpos (pat, str, 1);
-		END;
-	END;
-END RemoveChars;
-}
+
 PROCEDURE EncodeEntTyp (str : IN OUT string);
 BEGIN
 	str := '';
@@ -669,6 +655,7 @@ BEGIN
 						strcat (tempstr, s80);
 						msg_ok (tempstr);
 					end;
+					supressinfo := true;
 					return;
 				end;
 			end;
@@ -698,6 +685,7 @@ BEGIN
 			strassign (tempstr, sunposmsg);
 			strcat (tempstr, ' set as Sun Position');
 			wrterr (tempstr);
+			supressinfo := true;
 			return;
 		end;
 	UNTIL false;
@@ -1468,7 +1456,7 @@ BEGIN
 		elsif (key = f6) and hlentdash and hlent then
 			wrtmsg ('Entity Dash Pixels: ');
 			getint (hlentpx);
-			SaveInt ('HLEntDashSpace', hlentpx, true);
+			SaveInt ('HLEntDashSpc', hlentpx, true);
 		elsif (key = f8) and hlent then
 			HighlightSS (EntitySS, true, false);
 		elsif (key = s1) then
@@ -1493,7 +1481,7 @@ BEGIN
 			elsif (key=s6) and hlsurfdash then
 				wrtmsg ('Surface Dash Pixels: ');
 				getint (hlsurfpx);
-				SaveInt ('HLSurfDashSpace', hlsurfpx, true);
+				SaveInt ('HLSrfDashSpc', hlsurfpx, true);
 			elsif (key = s8) and not zplane then
 				HighlightEnt (surface, true, true);		
 			end;			
@@ -2602,6 +2590,7 @@ VAR
 	s : str80;
 BEGIN
 	namever :='Shadow v1.1.08   Copyright D Henderson 2017.';
+	supressinfo := false;
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
 	showprogress := false; ! disabled as update of progress display was unreliable, even though processing was proceeding ok
@@ -2618,6 +2607,7 @@ BEGIN
 	else
 		GetSvdStr ( 'ShadSunPosMg', '', sunposmsg);
 	end;
+
 	colour := GetSvdInt ('ShadColour', -1);
 	hatchclr := GetSvdInt('ShadHatchClr', -1);
 	hatchlines := GetSvdInt ('ShadHtchLins', 0);
@@ -2642,7 +2632,6 @@ BEGIN
 	
 	zplane := GetSvdBln ('ShadZedPlane', true);
 	zheight := GetSvdRl ('ShadZedHight', 0.0);
-
 	! check if a surface polygon has previously been selected for this drawing
 	ss := false;
 	setnil (surface.addr);
@@ -2665,7 +2654,6 @@ BEGIN
 			SaveBln ('ShadZedPlane',zplane, true);
 		end;
 	end;
-
 	DC190 := false;
 	DC191 := false;
 	DCVer := GetIniRl ('DCAD_Version', 0.0	);
@@ -2713,13 +2701,12 @@ BEGIN
 	hlentWgt := GetSvdBln ('HLEntWeight', true);
 	hlentclr := GetSvdInt ('HLEntClr', clrltgray);
 	hlentdash := GetSvdBln ('HLEntDash', true);
-	hlentpx := GetSvdInt ('HLEntDashSpace', 13);
+	hlentpx := GetSvdInt ('HLEntDashSpc', 13);
 	hlsurf := GetSvdBln ('HiliteSurf', true);
 	hlsurfclr := GetSvdInt ('HLSurfClr', clrltgray);
 	hlsurfWgt := GetSvdBln ('HLSurfWeight', true);
 	hlsurfdash := GetSvdBln ('HLSurfDash', true);
-	hlsurfpx := GetSvdInt ('HLSurfDashSpace', 26);
-	
+	hlsurfpx := GetSvdInt ('HLSrfDashSpc', 26);
 END Initialise;
 
 BEGIN
@@ -2728,6 +2715,24 @@ BEGIN
 	done := false;
 	REPEAT
 		wrtlvl ('Shadow');
+		if supressinfo then 
+			supressinfo := false;
+		else
+			if colour > 0 then
+				GetClrName (colour, tempstr);
+				strins (tempstr, 'Shadows drawn in ', 1);
+			else
+				tempstr := 'Shadows drawn current clr';
+			end;
+			strcat (tempstr, ' on ');
+			if strlen (lyrname) > 0 then
+				strcat (tempstr, lyrname);
+				strcat (tempstr, ' layer');
+			else
+				strcat (tempstr, 'active layer');
+			end;
+			wrterr (tempstr);
+		end;
 		wrtmsg(namever);
 		lblsinit;
 		lblset (1, 'North');
