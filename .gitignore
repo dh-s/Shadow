@@ -7,3 +7,5 @@ Shad/
 *.pdf
 *-save.*
 temp*
+*_history*
+*debug*

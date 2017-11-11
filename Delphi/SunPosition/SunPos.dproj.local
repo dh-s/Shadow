@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+	<Transactions>
+    <Transaction>2017/05/20 22:28:52.000.089,=C:\Users\David\Documents\Embarcadero\Studio\Projects\Unit1.pas</Transaction>
+    <Transaction>2017/05/20 23:07:15.000.329,C:\Users\David\Documents\Embarcadero\Studio\Projects\Unit1.dfm=C:\dhSoftware\Delphi\SunPosition\Unit1.dfm</Transaction>
+    <Transaction>2017/05/20 23:07:15.000.329,C:\Users\David\Documents\Embarcadero\Studio\Projects\Unit1.pas=C:\dhSoftware\Delphi\SunPosition\Unit1.pas</Transaction>
+    <Transaction>2017/05/20 23:07:30.000.112,C:\Users\David\Documents\Embarcadero\Studio\Projects\Project1.dproj=C:\dhSoftware\Delphi\SunPosition\SunPos.dproj</Transaction>
+    <Transaction>2017/06/03 04:21:44.000.240,=C:\dhSoftware\Delphi\SunPosition\Unit2.pas</Transaction>
+    <Transaction>2017/06/03 18:26:53.000.341,C:\dhSoftware\Delphi\SunPosition\Unit2.pas=</Transaction>
+    <Transaction>2017/06/10 16:47:56.000.591,=C:\dhSoftware\Delphi\SunPosition\Unit3.pas</Transaction>
+    <Transaction>2017/06/18 06:23:05.000.853,=C:\dhSoftware\Delphi\SunPosition\Unit2.pas</Transaction>
+    <Transaction>2017/06/18 06:23:28.000.861,C:\dhSoftware\Delphi\SunPosition\Unit2.pas=</Transaction>
+  </Transactions>
+</BorlandProject>
