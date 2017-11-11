@@ -38,7 +38,7 @@ BEGIN
 		atr_update (atr);
 	else
 		atr_init (atr, atr_int);
-		atr.name := name;
+		strassign (atr.name, name);
 		atr.int := value;
 		atr_add2sys (atr);
 	end;
@@ -72,7 +72,7 @@ BEGIN
 		atr_update (atr);
 	else
 		atr_init (atr, atr_ang);
-		atr.name := name;
+		strassign (atr.name, name);
 		atr.ang := value;
 		atr_add2sys (atr);
 	end;
@@ -117,7 +117,7 @@ BEGIN
 		atr_update (atr);
 	else
 		atr_init (atr, atr_rl);
-		atr.name := name;
+		strassign (atr.name, name);
 		atr.rl := value;
 		atr_add2sys (atr);
 	end;
@@ -156,7 +156,7 @@ BEGIN
 		atr_update (atr);
 	else
 		atr_init (atr, atr_int);
-		atr.name := name;
+		strassign (atr.name, name);
 		atr.int := ival;
 		atr_add2sys (atr);
 	end;
