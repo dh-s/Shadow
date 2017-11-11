@@ -1,0 +1,50 @@
+PROGRAM RealCompareTest;
+
+PROCEDURE msg_OK (msg : str255); BUILTIN 245;
+
+VAR
+	DCVer : real;
+	str, str1		: str255;
+
+BEGIN
+	DCVer := 0.0;
+	if DCVer > 190000.0 then
+		str := '0.0 is greater than 190000.0\r';
+	else 
+		str := '0.0 is not greater than 190000.0\r';
+	end;
+	if (DCVer/1000.0) > (190000.0/1000.0) then
+		strcat (str, '0.0/1000.0 is greater than 190000.0/1000.0\r');
+	else 
+		strcat (str, '0.0/1000.0 is not greater than 190000.0/1000.0\r');
+	end;
+	if DCVer > 19000.0 then
+		strcat (str, '0.0 is greater than 19000.0\r');
+	else 
+		strcat (str, '0.0 is not greater than 19000.0\r');
+	end;
+	if DCVer > 1900.0 then
+		strcat (str, '0.0 is greater than 1900.0\r');
+	else 
+		strcat (str, '0.0 is not greater than 1900.0\r');
+	end;
+	cvrllst (190000.1, str1);
+	strcat (str, '190000.1 = ');
+	strcat (str, str1);
+	cvrllst (196610.0, str1);
+	strcat (str, '\r196610.0 = ');
+	strcat (str, str1);
+	cvrllst (98304.0, str1);
+	strcat (str, '\r98304 = ');
+	strcat (str, str1);
+	cvrllst (98304.000123, str1);
+	strcat (str, '\r98304.000123 = ');
+	strcat (str, str1);
+	cvrllst (190000.0 - 1.0, str1);
+	strcat (str, '\r190000.0 - 1.0 = ');
+	strcat (str, str1);
+	cvrllst (190000.0 - 120000.0, str1);
+	strcat (str, '\r190000.0 - 120000.0 = ');
+	strcat (str, str1);
+	msg_OK (str);
+END RealCompareTest.

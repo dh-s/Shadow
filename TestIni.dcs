@@ -1,0 +1,20 @@
+PROGRAM Test;
+
+PROCEDURE writeIniInt (IniFile, Section, Ident : str255; Value : integer); BUILTIN 628;
+PROCEDURE readIniInt ( IniFile, Section, Ident: str255; Default : integer; ReturnInt : OUT integer); BUILTIN 629;
+
+VAR
+	iniFileName	: str255;
+	i : integer;
+
+BEGIN
+		getpath (iniFileName, pathmcr);
+		strcat (iniFileName, 'Test.ini');
+
+		writeIniInt (iniFileName, 'General', 'Test', 12);
+		pause (1.0);
+		readIniInt (iniFileName,'General', 'Test', 0, i);
+		wrtmsg ('Returned value for i:');
+		getint (i);
+END Test.
+

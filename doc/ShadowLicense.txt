@@ -1,0 +1,9 @@
+Shadow Macro for DataCAD  v1.0
+Copyright David Henderson 2017 (some rights reserved)
+
+This software is distributed free of charge and WITHOUT WARRANTY. You may distribute it to others provided that you distribute the complete unaltered installation file provided by me at the dhsoftware.com.au web site, and that you do so free of charge (This includes not  charging for distribution media and not charging for any accompanying software that is on the same media or contained in the same download or distribution file). 
+If you wish to make any charge at all you need to obtain specific permission from me. 
+ 
+Whilst it is free (or because of this) I would like and expect that if you can think of any improvements or spot any bugs (or even spelling or formatting errors in the documentation) that you would let me know.  Your feedback will help with future development of the macro.
+
+Whilst the source code of the macro is available for download, it is not 'open source'. You must not make changes and then make a competing product available to others. You can make changes for your own (or your company's) use, however in general I would prefer that you let me know of your requirements so that I can consider including them in a future release of my software. If in doubt please contact me.

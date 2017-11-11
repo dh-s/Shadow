@@ -1,0 +1,8 @@
+PROGRAM RealTest;
+VAR
+	r : real;
+	
+BEGIN
+	r := 31666.5166666667 * 6.0;
+	getrl (r);
+END RealTest.

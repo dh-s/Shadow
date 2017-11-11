@@ -1,0 +1,9 @@
+*.DCO
+Shad/
+*.DCX
+*.zip
+*.exe
+*#
+*.pdf
+*-save.*
+temp*

@@ -1,0 +1,26 @@
+PROGRAM Test;
+
+PROCEDURE msg_OK (msg : str255); BUILTIN 245;
+
+VAR
+	res, key, i	: integer;
+	ent	: entity;
+	mode : mode_type;
+	addr : entaddr;
+	str : str255;
+BEGIN
+	repeat
+		res := getmode ('to count', mode, key);
+		if res = res_normal then
+			addr := ent_first (mode);
+			i := 0;
+			WHILE ent_get (ent, addr) DO
+				addr := ent_next (ent, mode);
+				i := i+1;
+			END;
+			cvintst (i, str);
+			msg_OK (str);
+		end; 
+	until res = res_escape;
+END Test.
+

@@ -1,0 +1,287 @@
+
+PROGRAM Test;
+
+# INCLUDE '..\\..\\Inc\\_INPUT.inc'
+
+PROCEDURE msg_OK (msg : str255); BUILTIN 245;
+PROCEDURE ShowArrow (direction : real);		EXTERNAL;
+PROCEDURE PlinCovered(Plin : In Out entity; covered : boolean); BUILTIN 674;
+PROCEDURE PlinVoidAdd(Parent, Void : In Out entity); BUILTIN 673;
+
+
+
+TYPE
+	shaddef = RECORD
+		Version : integer; ! Should be 1
+		Fill_color : longint; ! Entity color if < 0
+		Fill_pattern : integer; ! 0-6
+		Pattern_color : longint; ! Entity color if < 0
+	END;
+{
+		filldef = RECORD
+			dunno1	: integer;	! seems to be always 272
+			dunno2	: integer;	! seems to be always 0
+			fillclr	: integer;	! clrnum x 256,  +255 if entity clr,  (wraps to -ve over clr127)
+			entclr	: integer;	! -1 to fill with entity clr, else 0
+			filltyp	: integer;	! 0..6 multiplied by 256
+			ptnclr	: integer;	! clrnum x 256
+		END;
+}
+	atrstr = RECORD
+		a : integer;
+		CASE integer of
+			0 : (s : str80);
+			1 : (i : array [1..20] of integer);
+			2 : (r : array [1..10] of longint);
+			3 : (d : shaddef);
+		END;
+	
+	
+
+VAR
+p1, p2, p3, p4, p5 : point;
+ent, ent1	: entity;
+res	: integer;
+mode: mode_type;
+addr: entaddr;
+key	: integer;
+fl	: file;
+str, str1 : str255;
+aAddr : atraddr;
+atr		: attrib;
+a			: atrstr;
+i			: integer;
+r : real;
+done : boolean;
+
+FUNCTION Test1 : boolean;
+BEGIN
+	msg_OK ('Test1');
+	return false;
+END Test1;
+
+FUNCTION Test2 : boolean;
+BEGIN
+	msg_OK ('Test2');
+	return false;
+END Test2;
+
+BEGIN
+globalesc (530);
+globalesc (f4);
+ getchar (key);
+	getint (key);
+if false then
+	repeat getchar (key);
+	getint (key);
+	until key = s0;
+	{
+	res := getpointp (P1, key, vmode_all, false);
+	 IF res = res_escape THEN 
+		getint (key);
+		 globalesc (key);
+	END;}
+	{
+	wrtmsg ('dis from line:');
+	setpoint (p1, 0.0);
+	setpoint (p2, 100.0);
+	setpoint (p3, 200.0);
+	p3.z := -100.0;
+	r := dis_from_line (p1, p2, p3);
+	getrll (r);
+	}
+	{
+	execandwait ('Application1.exe', 0, res);
+	getint (res);
+
+	res := f_create (fl, 'TextFile.txt', true);
+	wrtmsg ('f_create res:');
+	getint (res);
+	res := f_wrstr (fl, 'this is a test file');
+	res := f_close (fl);
+
+	if Test1 and Test2 then
+		msg_ok ('Tested');
+	end;
+	}
+	{
+	done := false;
+	repeat
+		res := getmode ('to examine', mode, key);
+		if res = res_normal then
+			addr := ent_first (mode);
+			WHILE ent_get (ent, addr) DO
+				addr := ent_next (ent, mode);
+				if ent.enttype = entpln then
+					PlinCovered(ent, true);
+				end;
+			END;
+		else
+			done := true;
+		end;
+	until done;
+	}
+
+	done := false;
+	repeat
+		res := getmode ('to examine', mode, key);
+		if res = res_normal then
+			addr := ent_first (mode);
+			if ent_get (ent, addr) then
+	{			res := getmode ('to add as void', mode, key);
+				if res = res_normal then
+					addr  := ent_FIRST (MODE);
+						if ent_get (ent1, addr) then
+							PlinVoidAdd(ent, ent1);
+						end;
+				end;
+	}
+				str := 'EntType:';
+				cvintst (ent.enttype, str1);
+				strcat (str, str1);
+				strcat (str, '\rAttr:');
+				cvintst (ent.attr, str1);
+				strcat (str, str1);
+				while atr_get (atr, aAddr) do
+					strcat (str, '\r');
+					strcat (str, atr.name);
+				end;
+				msg_ok (str);
+			END;
+		else
+			done := true;
+		end;
+	until done;
+
+	{
+				ent.color := clryellow;
+				ent_draw (ent, drmode_white);
+				str := 'enttype:';
+				cvintst (ent.enttype, str1);
+				strcat (str, str1);
+				strcat (str, ',   attr:');
+				cvintst (ent.attr, str1);
+				strcat (str, str1);
+				aAddr := atr_entfirst(ent);
+				while atr_get (atr, aAddr) do
+					strcat (str, '\r');
+					strcat (str, atr.name);
+	(*				
+					if atr.atrtype = atr_str then
+						strcat (str, ',str:');
+	!					strcat (str, atr.str);
+						strcat (str, '\r');
+						a.a := 0;
+						a.s := atr.str;
+						a.a:= 1;
+						for i := 1 to 20 do
+							cvintst (a.i[i], str1);
+							strcat (str, str1);
+							strcat (str, ',');
+						end;
+						strcat (str, '\r');
+						for i := 1 to 20 do
+							cvintst (a.i[i] mod 256, str1);
+							strcat (str, str1);
+							strcat (str, ',');
+							cvintst (a.i[i] / 256, str1);
+							strcat (str, str1);
+							strcat (str, ';');
+						end;
+						a.a:= 2;
+						for i := 1 to 10 do
+							cvlntst (a.r[i], str1);
+							strcat (str, str1);
+							strcat (str, ',');
+						end;
+						strcat (str, '\r');
+					elsif atr.atrtype = atr_int then
+						strcat (str, ',int:');
+						cvintst (atr.int, str1);
+						strcat (str, str1);
+					elsif atr.atrtype = atr_rl then
+						strcat (str, ',real:');
+						cvrllst (atr.rl, str1);
+						strcat (str, str1);
+					elsif atr.atrtype = atr_dis then
+						strcat (str, ',dis:');
+						cvdisst (atr.dis, str1);
+						strcat (str, str1);
+					elsif atr.atrtype = atr_ang then
+						strcat (str, ',ang:');
+						cvangst (atr.ang, str1);
+						strcat (str, str1);
+					elsif atr.atrtype= atr_pnt then
+						strcat (str, ',pnt');
+					elsif atr.atrtype = atr_addr then
+						strcat (str, ',addr');
+					else
+						cvintst (atr.atrtype, str1);
+						strcat (str, ',');
+						strcat (str, str1);
+						strcat (str, '\r');
+						a.s := atr.str;
+						a.a:= 1;
+						for i := 1 to 20 do
+							cvintst (a.i[i], str1);
+							strcat (str, str1);
+							strcat (str, ',');
+						end;
+						strcat (str, '\r');
+					end; 
+	*)
+					a.s := atr.str;
+					strcat (str, '\rVer:');
+					cvlntst (a.d.version, str1);
+					strcat (str, str1);
+					strcat (str, '\rFillClr:');
+					cvlntst (a.d.Fill_color, str1);
+					strcat (str, str1);
+					strcat (str, '\rFill Ptn:');
+					cvintst (a.d.Fill_pattern, str1);
+					strcat (str, str1);
+					strcat (str, '\rPtn Clr:');
+					cvlntst (a.d.pattern_color, str1);
+					strcat (str, str1);
+
+					aAddr := atr_next (atr);
+				end;
+				
+				ent_extent (ent, p1, p2);
+				cvrllst (p1.z, str1);
+				strcat (str, '\r');
+				strcat (str, str1);
+				strcat (str, ',');
+				cvrllst (p2.z, str1);
+				strcat (str, str1);
+				msg_OK (str);
+			END;
+		end;
+	until res <> res_normal;  
+	}
+	{
+		setpoint (p1, 0.0);
+		p2.x := 0.0;
+		p2.y := 4.0;
+		p3.x := 0.0;
+		p3.y := 1.0;
+		p4.x := 0.0;
+		p4.y := 3.0;
+		msg_ok ('Test');
+		if intr_linlin (p1, p2, p3, p4, p5, true) then
+			ent_init (ent, entmrk);
+			ent.mrkPnt := p5;
+			ent.mrkTyp :=2;
+			ent.mrkSiz := 8;
+			ent_draw (ent, drmode_white);
+			msg_OK ('intersect');
+			getrll(p5.y);
+		else
+			msg_OK ('No intersect');
+			getrll (p1.x);
+		end;
+		msg_ok ('Tested');
+	}
+end;
+END Test.
+
