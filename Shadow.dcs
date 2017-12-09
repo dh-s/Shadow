@@ -91,7 +91,6 @@ VAR
 	toponly		: boolean;
 	showprogress : boolean;
 	
-	
 	doLin, doLn3, do2DCurves, doBasic3D, do3DCurvSurf, doPln, doText, doSym, doDim : boolean;
 	
 	zplane		: boolean;
@@ -620,11 +619,14 @@ BEGIN
 		ELSIF key = f2 THEN
 			SaveSunPos;
 		ELSIF key =F3 THEN
+			WrtErr ('Sun Position Calculator may take a few seconds to open ...');
+			wrtmsg ('');
 			SaveIniStr ('Filter', '');
 			SaveIniRl ('ShadAltitude', 0.0);
 			getpath (sunpos, pathsup);
 			strcat (sunpos, 'dhsoftware\\Sunpos.exe');
 			ExecAndWait (sunpos, 1, res);
+			wrterr ('');
 			if res = 0 then
 			svmsg := sunposmsg;
 			GetIniStr ( 'ShadSunPosMg', '', sunposmsg);
@@ -1501,6 +1503,7 @@ PROCEDURE SetShadSymbolName (symname : IN OUT symstr);
 
 VAR
 	str				: str255;
+	sym				: symbol;
 
 BEGIN
 	symname := 'SHADOW ';
@@ -1518,6 +1521,11 @@ BEGIN
 	AppendDateTimeStamp (symname, true, true, true, true);
 	RemoveChars (symname, '"\'');	! Remove single and double quote characters which may be in the string as a result of the cvangst calls.
 																! (if left in the symbol name these characters will cause the DataCAD drawing to crash)
+	if sym_find (symname, sym) then
+		! 2 shadows with same name, pause one second so that timestamp changes.
+		pause (1.0);
+		SetShadSymbolName (symname);
+	end;
 END SetShadSymbolName;
 
 
@@ -2590,7 +2598,7 @@ VAR
 	r	: real;
 	s : str80;
 BEGIN
-	ver := 'v1.1.08';
+	ver := 'v1.1.10';
 	namever := 'Shadow ';
 	strcat (namever, ver);
 	strcat (namever, '   Copyright D Henderson 2017.');
@@ -2864,10 +2872,9 @@ BEGIN
 		getesc (key);
 		IF key = s9 THEN
 			getpath (tempstr, pathsup);
-			strcat (tempstr, 'dhsoftware\\ShadHelp.exe ');
-			strcat (tempstr, ver);
-			ExecAndWait (tempstr, 1, res);
-			if res <> 0 then
+			strcat (tempstr, 'dhsoftware');
+			res := ExecProg (tempstr, 'ShadHelp.exe', ver, key);
+			if res <> 1 then
 				beep;
 			end;
 		ELSIF key=f1 THEN
