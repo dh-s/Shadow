@@ -1,12 +1,3 @@
-; example1.nsi
-;
-; This script is perhaps one of the simplest NSIs you can make. All of the
-; optional settings are left to their default settings. The installer simply 
-; prompts the user asking them where to install, and drops a copy of example1.nsi
-; there. 
-
-;--------------------------------
-
 ; The name of the installer
 Name "Shadow Macro"
 
@@ -17,14 +8,14 @@ var DCSupDir
 
 !define LANG_ENGLISH 3081
 !define TEMP1 $R0 ;Temp variable
-VIProductVersion "1.1.0.6"
+VIProductVersion "1.1.10.0"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductName" "Shadow"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "Comments" "For use with DataCAD"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "CompanyName" "dhSoftware"
 ;VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalTrademarks" "Test Application is a trademark of Fake company"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "David Henderson 2017"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "FileDescription" "Shadow Macro for DataCAD"
-VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "1.1.0.6"
+VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "1.1.10.0"
 
 !include LogicLib.nsh
 
