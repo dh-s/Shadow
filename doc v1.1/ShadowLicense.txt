@@ -1,4 +1,4 @@
-Shadow Macro for DataCAD  v1.1.08
+Shadow Macro for DataCAD  v1.1.10
 Copyright David Henderson 2017 (some rights reserved)
 
 This software is distributed free of charge and WITHOUT WARRANTY. You may distribute it to others provided that you distribute the complete unaltered installation file provided by me at the dhsoftware.com.au web site, and that you do so free of charge (This includes not  charging for distribution media and not charging for any accompanying software that is on the same media or contained in the same download or distribution file). 
