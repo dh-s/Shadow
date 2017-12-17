@@ -268,7 +268,7 @@ Section "" ;No components page, name is not important
 
 	File C:\DCAL\Projects\Shadow\Shadow.msg
 	File C:\DCAL\Projects\Shadow\Shadow.lbl
-	File "C:\dhSoftware\Delphi\SunPosition v1.1\Win32\Release\SunPos.exe"
+	File "C:\DCAL\Projects\Shadow\Delphi\SunPosition v1.1\Win32\Release\SunPos.exe"
   File "C:\DCAL\Projects\Shadow\doc v1.2\ShadowInstructions.pdf"
 	File "C:\dhSoftware\Delphi\ShadHelp v1.1\Win32\Release\ShadHelp.exe"
   
