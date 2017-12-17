@@ -9,7 +9,7 @@ uses
   Vcl.ExtCtrls, Vcl.Buttons, System.IniFiles, Vcl.Menus, ShellApi;
 
 const
-  Version = 'Sun Position Calculator      version 1.0.3';
+  Version = 'Sun Position Calculator      version 1.0.4';
 
 type
 	ResultRec = RECORD
@@ -935,6 +935,7 @@ end;
 
 procedure TForm1.btnExitClick(Sender: TObject);
 begin
+  SaveSettings;
   Application.Terminate;
 end;
 
@@ -955,6 +956,7 @@ begin
     finally
       Ini.Free;
     end;
+    SaveSettings;
     Application.Terminate;
   end
   else begin

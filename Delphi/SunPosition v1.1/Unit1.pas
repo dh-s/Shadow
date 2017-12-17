@@ -846,13 +846,13 @@ begin
     Times[2].DateTime := Ini.ReadTime ('Calculator', 'Time2', EncodeTime(12,0,0,0));
     Times[3].DateTime := Ini.ReadTime ('Calculator', 'Time3', EncodeTime(15,0,0,0));
     Times[4].DateTime := Ini.ReadTime ('Calculator', 'Time4', EncodeTime(18,0,0,0));
-    edLatitude.Text := Ini.ReadString ('Calculator', 'Latitude', '49.351631');
-    edLongitude.Text := Ini.ReadString ('Calculator', 'Longitude', '8.143325');
-    edZone.ItemIndex := Ini.ReadInteger ('Calculator', 'ZoneNdx', 22);
+    edLatitude.Text := Ini.ReadString ('Calculator', 'Latitude', '-33.720748');
+    edLongitude.Text := Ini.ReadString ('Calculator', 'Longitude', '149.848140');
+    edZone.ItemIndex := Ini.ReadInteger ('Calculator', 'ZoneNdx', 6);
     rbDecDeg.Checked := Ini.ReadBool('Calculator', 'DecimalDegees', true);
     rbDegMinSec.Checked := not rbDecDeg.Checked;
-    edPlace.Text := Ini.ReadString ('Calculator', 'Place', 'Neustadt an der Weinstraﬂe, Germany');
-    edAbrev.Text := Ini.ReadString ('Calculator', 'Place Abrev', 'Neustadt DE');
+    edPlace.Text := Ini.ReadString ('Calculator', 'Place', 'Lake Oberon NSW');
+    edAbrev.Text := Ini.ReadString ('Calculator', 'Place Abrev', 'Oberon');
 	finally
 		Ini.Free;
 	end;
@@ -1002,6 +1002,7 @@ begin
     finally
       Ini.Free;
     end;
+    SaveSettings;
     Application.Terminate;
   end
   else begin
