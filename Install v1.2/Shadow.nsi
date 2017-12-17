@@ -8,14 +8,14 @@ var DCSupDir
 
 !define LANG_ENGLISH 3081
 !define TEMP1 $R0 ;Temp variable
-VIProductVersion "1.1.10.0"
+VIProductVersion "1.2.0.0"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "ProductName" "Shadow"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "Comments" "For use with DataCAD"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "CompanyName" "dhSoftware"
 ;VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalTrademarks" "Test Application is a trademark of Fake company"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "LegalCopyright" "David Henderson 2017"
 VIAddVersionKey /LANG=${LANG_ENGLISH} "FileDescription" "Shadow Macro for DataCAD"
-VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "1.1.10.0"
+VIAddVersionKey /LANG=${LANG_ENGLISH} "FileVersion" "1.2.0.0"
 
 !include LogicLib.nsh
 
@@ -249,7 +249,7 @@ Page custom SetCustom1 ValidateCustom1 ": Instruction Manual" ;Custom page. Inst
 ;--------------------------------
 BrandingText  /TRIMCENTER "dhSoftware"
 Caption "Install Shadow Macro"
-LicenseData "C:\DCAL\Projects\Shadow\doc v1.1\ShadowLicense.txt"
+LicenseData "C:\DCAL\Projects\Shadow\doc v1.2\ShadowLicense.txt"
 LicenseForceSelection checkbox "I Accept"
 ;LicenseForceSelection radiobuttons "I Accept" "I Decline"
 ; The stuff to install
@@ -266,8 +266,10 @@ Section "" ;No components page, name is not important
 	StrCpy $DCSupDir $0$1
   SetOutPath $DCSupDir
 
-	File C:\dhSoftware\Delphi\SunPosition\Win32\Release\SunPos.exe
-  File "C:\DCAL\Projects\Shadow\doc v1.1\ShadowInstructions.pdf"
+	File C:\DCAL\Projects\Shadow\Shadow.msg
+	File C:\DCAL\Projects\Shadow\Shadow.lbl
+	File "C:\dhSoftware\Delphi\SunPosition v1.1\Win32\Release\SunPos.exe"
+  File "C:\DCAL\Projects\Shadow\doc v1.2\ShadowInstructions.pdf"
 	File "C:\dhSoftware\Delphi\ShadHelp v1.1\Win32\Release\ShadHelp.exe"
   
 SectionEnd ; end the section

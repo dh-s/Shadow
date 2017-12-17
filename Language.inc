@@ -1,0 +1,22 @@
+PROCEDURE LangInit (FileName : string);		EXTERNAL;
+PROCEDURE lplblset (KeyNdx, LblNdx : integer; params : array of str80; nparam : integer);		EXTERNAL;
+PROCEDURE llblset (KeyNdx, LblNdx : integer);		EXTERNAL;
+PROCEDURE lplblsett (KeyNdx, LblNdx : integer; toggle : boolean; params : array of str80; nparam : integer);		EXTERNAL;
+PROCEDURE llblsett (KeyNdx, LblNdx : integer; toggle : boolean);		EXTERNAL;
+PROCEDURE lpwrtlvl (LblNdx : integer; params : array of str80; nparam : integer);		EXTERNAL;
+PROCEDURE lwrtlvl (LblNdx : integer); EXTERNAL;
+PROCEDURE GetLvl (LblNdx : integer; Lvl : IN OUT string); EXTERNAL;
+PROCEDURE GetMsgParams (MsgNdx : integer; params : array of str80; nparam : integer; msg : IN OUT string); EXTERNAL;
+PROCEDURE GetMsg (MsgNdx : integer; msg : IN OUT string); EXTERNAL;
+PROCEDURE lwrtmsg (MsgNdx : integer); EXTERNAL;
+PROCEDURE lpwrtmsg (MsgNdx : integer; params : array of str80; nparam : integer); EXTERNAL;
+PROCEDURE lwrterr (MsgNdx : integer); EXTERNAL;
+PROCEDURE lpwrterr (MsgNdx : integer; params : array of str80; nparam : integer); EXTERNAL;
+PROCEDURE lprintstr (MsgNdx : integer; col, row, color, cursor : integer; inverse : boolean); EXTERNAL;
+PROCEDURE lpMsg_OK (MsgNdx : integer; params : array of str80; nparam : integer); EXTERNAL;
+PROCEDURE lMsg_OK (MsgNdx : integer); EXTERNAL;
+PROCEDURE lStrCat (str : IN OUT string; MsgNdx : integer); EXTERNAL;
+PROCEDURE CompoundMsg (Ndx1, Ndx2 : integer; params : array of str80; nparam : integer);		EXTERNAL;
+FUNCTION lpMsg_Confirm (MsgNdx : integer; params : array of str80; nparam : integer) : boolean; EXTERNAL;
+FUNCTION lMsg_Confirm (MsgNdx : integer) : boolean; EXTERNAL;
+

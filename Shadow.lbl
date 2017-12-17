@@ -1,0 +1,61 @@
+Shadow|(level)
+North|$
+Sun Position|Set azimuth & altitude (currently $)
+Sun-eye View|Set viewing projection to view from the sun position
+Entities|Select entities to cast shadows of (not set)
+Entities|Select entities to cast shadows of ($: $)
+Hilite|Highlight Surface and Entities
+Surface|Define surface shadows are cast onto (horizontal plane at $)
+Surface|Define surface shadows are cast onto (polygon selected)
+Trim Shadow|Trim Shadow to surface polygon
+Start|Generate shadows for selected entities
+Help / About|Display information about this macro, and a link to the Instruction Document
+Exit|
+Sun Position|(Level)
+Enter Position|Enter sun position manually (Current setting: Azimuth=$, Altitude=$)
+Save|Save the current azimuth/altitude for future use in any drawing
+Sun Calculator|Use the Sun Position Calculator to set altitude & azimuth
+Filter|Set a filter for display of saved sun positions on function keys
+$|Filter in use: $
+Shadow Surface|(Level)
+Fixed Z|Cast shadows on an infinite horizontal plane $
+Polygon|Select a polygon to define shadow surface
+Top Only|Cast shadows on upper surface only of non-vertical polygons
+Entity Types|(Level)
+Basic 3D Ents|Process Polygon, Slab, and Block entities
+Curved 3D Ents|Process Sphere, Dome, Cylinder, Cone, Surface of Rev, Torus, Mesh Surface
+3D Lines|Process straight and curved 3D Lines such as 3D circles and arcs
+2D Lines|Process 2D lines, circles, arcs, elipses, beziers, b-splines
+PolyLine|Process Polylines
+Symbols|Process Symbols (regardless of the types of entity they contain)	
+Text|Cast shadows of Text entities	
+Dimensions|Cast shadows of Associative Dimensions
+Shadow Entities|(Level)
+Add To Set|Add entities to selection set
+Del From Set|Remove entities from selection set
+Clear Set|Clear selection set
+Rename|Rename Selection Set
+Ent Types|Select entity types to cast shadows ($)
+Sel Set $|Selection Set $
+Top Only|Cast shadows on upper surface only of non-vertical polygons
+Hilite Entities|Hilite selected shadow entities
+Colour|Highlight colour is $
+Increased Wgt|Highlight with increased weight
+Solid Lines|Highlight will be shown with solid lines
+Dashed Lines|Highlight will be shown with dashed lines
+Line Spacing|Line spacing in pixels for highlighted entities ($)
+Show Entities|Highlight the shadow entities now
+Hilite Surf|Hilite the shadow surface polygon
+Show Surface|Highlight the shadow surface now
+Cannot Show|Shadow surface is currently z height (not an entity) and cannot be shown
+Back|Return to main Shadow menu
+Shadow Layer|(Level)
+Solid Fill|Solid Fill the shadows
+Cover|Add a cover to shadow polylines
+Spec Clr|Specify a colour to draw shadows
+Curr Clr|Shadows will be drawn in the current colour
+Spec Layer|Specify a layer to draw shadows on ($)
+Active Layer|Draw shadows on the currently active layer
+Hilite Settings|(Level)
+Lyr Menu|Choose from layer menu
+Hilite Entities|(If not enabled then selected entities will not be hightlighted)

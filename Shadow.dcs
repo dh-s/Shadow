@@ -31,6 +31,7 @@ PROGRAM Shadow;
 # INCLUDE '..\\..\\Inc\\_pline.inc'
 # INCLUDE '..\\..\\Inc\\_misc.inc'
 # INCLUDE '..\\..\\Inc\\_hatch.inc'	
+# INCLUDE '..\\..\\Inc\\_input.inc'	
 
 # INCLUDE 'pntutil.inc'
 # INCLUDE 'Errutil.inc'
@@ -39,7 +40,7 @@ PROGRAM Shadow;
 # INCLUDE 'SolidFll.inc'
 # INCLUDE 'Arrows.inc'
 # INCLUDE 'LyrUtil.inc'
-# INCLUDE 'Layers.inc'
+# INCLUDE 'Language.inc'
 
 CONST
    ssNum  = 11;
@@ -111,7 +112,10 @@ VAR
 	hlsurfdash: boolean;
 	hlsurfpx	: integer;
 	supressinfo: boolean;
-	
+
+	LangParams	: array [1..6] of str80;
+
+
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
 FUNCTION msg_dlg (msg : str255; msgDlgType, msgDlgButtons : integer) : integer; BUILTIN 246;
 PROCEDURE execAndWait ( prog : str255; Visibility: integer; returnCode : OUT integer); BUILTIN 632;
@@ -248,15 +252,16 @@ VAR
 	END SaveNorth;
 	
 BEGIN
-	ShowArrow (north, 'CURRENT NORTH', clrWhite);
+	GetMsg (1, tempstr);	!CURRENT NORTH
+	ShowArrow (north, tempstr, clrWhite);
 	lblsinit;
-	lblset (20, 'Exit');
+	llblset (20, 13);
 	lblson;
 	
 	ang := north;
 	
 	REPEAT
-		wrtmsg ('Select first point to define North');
+		lwrtmsg (2 {Select first point to define North});
 		result := getpoint (p1, key);
 		IF result = res_escape THEN
 			IF key = s0 THEN
@@ -268,7 +273,7 @@ BEGIN
 		END;
 	UNTIL done;
 	REPEAT
-		wrtmsg ('Select a point that is due north of the point just entered');
+		lwrtmsg (3 {Select a point that is due north of the point just entered});
 		rubln := true;
 		result := getpoint (p2, key);
 		IF result = res_escape THEN
@@ -282,7 +287,8 @@ BEGIN
 	UNTIL done;
 	north := ang;
 	Redraw;
-	ShowArrow (north, 'NORTH', clrWhite);
+	GetMsg (112 {NORTH}, tempstr);
+	ShowArrow (north, tempstr, clrWhite);
 	SaveNorth;
 END GetNorth;
 
@@ -293,9 +299,9 @@ VAR
 BEGIN
 	ang := azimuth;
 	lblsinit;
-	lblset (20, 'Exit');
+	llblset (20, 13 {Exit});
 	lblson;
-	wrtmsg ('Enter sun azimuth: ');
+	lwrtmsg (4 {Enter sun azimuth: });
 	result := dgetang (ang, key);		! note: using dgetang instead of getang because the standard function key angles are unlikely to be suitable
 	IF result = res_normal THEN
 		if azimuth <> ang then
@@ -315,9 +321,9 @@ VAR
 BEGIN
 	ang := altitude;
 	lblsinit;
-	lblset (20, 'Exit');
+	llblset (20, 13 {Exit});
 	lblson;
-	wrtmsg ('Enter sun altitude: ');
+	lwrtmsg (5 {Enter sun altitude: });
 	result := dgetang (ang, key);		! note: using dgetang instead of getang because the standard function key angles are unlikely to be suitable
 	IF result = res_normal THEN
 		if altitude <> ang then
@@ -358,8 +364,8 @@ BEGIN
 	b := false;
 	REPEAT
 		lblsinit;
-		lblset (20, 'Exit');
-		wrtmsg ('Enter function key label: ');
+		llblset (20, 13 {Exit});
+		lwrtmsg (6 {Enter function key label: });
 		lblson;
 		res := dgetstr (lbl, 24, key);
 		wrterr ('');
@@ -391,7 +397,7 @@ BEGIN
 	
 	lblsinit;
 	lblson;
-	wrtmsg ('Enter description: ');
+	lwrtmsg (10 {Enter description: });
 	getstr (desc, 80);
 	
 	getpath (path, pathsup);
@@ -452,7 +458,7 @@ BEGIN
 	res := f_close (fl);
 
 	IF NOT DisplayFileError (res, 'closing file') THEN
-		wrtmsg ('Sun Postion saved');
+		lwrtmsg (15 {Sun Postion saved});
 		strassign (sunposmsg, lbl);
 		SaveStr ('ShadSunPosMg', sunposmsg, false);
 	END;
@@ -576,41 +582,32 @@ BEGIN
 		! initialize saved settings filter
 		GetSvdStr ('ShadSvFilter', '', filter);
 		b := false;
-		wrtlvl ('Sun Position');
+		lwrtlvl (14 {Sun Position});
 		lblsinit;
-		wrtmsg ('Select Sun Position (Altitude, Azimuth)');
-		lblset (1, 'Enter Position');
-		cvangst (azimuth, str);
-		strins (str, ', Azimuth:', 1);
-		cvangst (altitude, tempstr);
-		strins (str, tempstr, 1);
-		strins (str, 'Altitude', 1);
+		lwrtmsg (27 {Select Sun Position (Altitude, Azimuth)});
+		cvangst (azimuth, LangParams[1]);
+		cvangst (altitude, LangParams[2]);
 		if strlen (sunposmsg) > 0 then
-			strins (str, ' (', 1);
-			strins (str, sunposmsg, 1);
-			strcat (str, ')');
+			LangParams[3] := ' (';
+			strins (LangParams[3] , sunposmsg, 1);
+			strcat (LangParams[3] , ')');
+		else
+			LangParams[3] := '';
 		end;
-		lblmsg (1, str);
-		lblset (2, 'Save');
-		lblmsg (2, 'Save the current azimuth/altitude for future use in any drawing');
-		lblset (3, 'Sun Calculator');
-		lblmsg (3, 'Use the Sun Position Calculator to set altitude & azimuth');
+		lplblset (1, 15 {Enter Position|Enter sun position manually (Current setting: Azimuth=$, Altitude=$)}, LangParams, 3);
+		llblset (2, 16 {Save|Save the current azimuth/altitude for future use in any drawing});
+		llblset (3, 17 {Sun Calculator|Use the Sun Position Calculator to set altitude & azimuth});
 		if strlen(filter) > 0 then
-			lblsett (5, filter, true);
+			strassign (LangParams[1], filter);
+			strassign (LangParams[2], filter);
+			lplblsett (5, 19 {$|Filter in use: $}, true, LangParams, 2);
 		else
-			lblsett (5, 'Filter', false);
-		end;
-		if strlen(filter)= 0 then
-			lblmsg (5, 'Set a filter for display of saved sun positions on function keys');
-		else
-			tempstr := 'Filter in use: ';
-			strcat (tempstr, filter);
-			lblmsg (5, tempstr);
+			llblsett (5, 18 {Filter|Set a filter for display of saved sun positions on function keys}, false);
 		end;
 		
 		ShowSaved;	!positions 6 thru 19 for saved settings
 		
-		lblset (20, 'Exit');
+		llblset (20, 13 {Exit});
 		
 		getesc (key);
 		IF key = f1 THEN
@@ -619,7 +616,7 @@ BEGIN
 		ELSIF key = f2 THEN
 			SaveSunPos;
 		ELSIF key =F3 THEN
-			WrtErr ('Sun Position Calculator may take a few seconds to open ...');
+			lWrtErr (108 {Sun Position Calculator may take a few seconds to open ...});
 			wrtmsg ('');
 			SaveIniStr ('Filter', '');
 			SaveIniRl ('ShadAltitude', 0.0);
@@ -644,9 +641,8 @@ BEGIN
 					SaveStr ('ShadSunPosMg', sunposmsg, false);
 					SaveAng ('Shad_Azimuth', azimuth, false);
 					SaveAng ('ShadAltitude', altitude, false);
-					strassign (tempstr, sunposmsg);
-					strcat (tempstr, ' set as sun position');
-					wrterr (tempstr);
+					strassign (langparams[1], sunposmsg);
+					lpwrterr (28 {$ set as sun position}, langparams, 1);
 					if (not strcomp (svmsg, sunposmsg, -1)) or (sval <> altitude) or (svaz <> azimuth) then
 						tempstr := 'Sun Position Changed to:\r\r';
 						strcat (tempstr, sunposmsg);
@@ -667,9 +663,9 @@ BEGIN
 			if strlen(filter) > 0 then
 				filter := '';				! note: need to toggle filter to enable it to be removed - getstr & dgetstr do not appear to allow you to update a string to a blank value ?!
 			else
-				wrtmsg ('Enter filter to apply to displayed saved settings: ');
+				lwrtmsg (29 {Enter filter to apply to displayed saved settings: });
 				lblsinit;
-				lblset (20, 'Exit');
+				llblset (20, 13 {Exit});
 				lblson;
 				result := dgetstr (filter, 24, key);
 				wrtmsg ('');
@@ -685,9 +681,8 @@ BEGIN
 		END;
 		
 		if b then
-			strassign (tempstr, sunposmsg);
-			strcat (tempstr, ' set as Sun Position');
-			wrterr (tempstr);
+			strassign (langparams[1], sunposmsg);
+			lpwrterr (28 {$ set as sun position}, langparams, 1);
 			supressinfo := true;
 			return;
 		end;
@@ -1066,37 +1061,34 @@ BEGIN
 		svsurface := surface;
 		svzplane := zplane;
 		svz := zheight;
-		wrtlvl ('Shadow Surface');
+		lwrtlvl (20);	!Shadow Surface
 		ReDraw; 	! remove any existing higlighted surface
 		if not zplane then
 			HighlightEnt (surface, true, true);
 		end;
 		lblsinit;
-		lblsett (1, 'Fixed Z', zplane);
-		tempstr := 'Cast shadows on an infinite horzontal plane';
 		if zplane then
-			strcat (tempstr, ' (z=');
+			LangParams[1] := ' (z=';
 			cvdisst (zheight, str);
 			if zheight < 0.0 then
 				strcat (tempstr, '-');
 			end;
-			strcat (tempstr, str);
-			strcat (tempstr, ')');
-			wrterr (tempstr);
+			strcat (LangParams[1], str);
+			strcat (LangParams[1], ')');
+		else
+			LangParams[1] := '';
 		end;
-		lblmsg (1, tempstr);
-		lblsett (3, 'Polygon', not zplane);
-		lblmsg (3, 'Select a polygon to define shadow surface');
+		lplblsett (1, 21, zplane, LangParams, 1);
+		llblsett (3, 22, not zplane);
 		if not zplane then
-			lblsett (4, 'Top Only', toponly);
-			lblmsg (4, 'Cast shadows on upper surface only of non-vertical polygons');
+			llblsett (4, 40 {Cast shadows on upper surface only of non-vertical polygons}, toponly);
 			if toponly then
-				wrterr ('Cast shadows on top surface of selected polygon');
+				lwrterr (109 {Cast shadows on top surface of selected polygon});
 			else
-				wrterr ('Cast shadows on selected polygon');
+				lwrterr (110 {Cast shadows on selected polygon});
 			end;
 		end;
-		lblset (20, 'Exit');
+		llblset (20, 13);
 		lblson;	
 		getesc (key);
 		IF key = s0 THEN
@@ -1114,7 +1106,7 @@ BEGIN
 			zplane := true;
 			lblsinit;
 			lblson;
-			wrtmsg ('Enter height of z plane: ');
+			lwrtmsg (30 {Enter height of z plane: });
 			getdis (zheight);
 			wrtmsg ('');
 			SaveBln ('ShadZedPlane',zplane, true);
@@ -1123,12 +1115,11 @@ BEGIN
 			REPEAT
 				HighlightEnt (surface, true, true);
 				lblsinit;
-				lblsett (4, 'Top Only', toponly);
-				lblmsg (4, 'Cast shadows on upper surface only of non-vertical polygons');
-				lblset (20, 'Exit');
+				llblsett (4, 40 {Cast shadows on upper surface only of non-vertical polygons}, toponly);
+				llblset (20, 13 {Exit});
 				lblson;
-				wrtmsg ('Select polygon to cast shadows onto');
-				res := getpoint (pt, key);
+				lwrtmsg (31 {Select polygon to cast shadows onto});
+				res := getpointp (pt, key, vmode_all, true);
 				wrtmsg ('');
 				IF res = res_normal THEN
 					mode_init (mode);
@@ -1188,39 +1179,39 @@ var
 	len : integer;
 BEGIN
 	if doLin and doLn3 and do2DCurves and doBasic3D and do3DCurvSurf and doPln and doText and doSym and doDim then
-		strcat (str, 'All entities');
+		lstrcat (str, 34);		!All entities
 	else
 		len := strlen (str);
 		if doBasic3D and do3DCurvSurf then
-			strcat (str, '3D Surfaces & Solids, ');
+			lstrcat (str, 35);		!3D Surfaces & Solids, 
 		elsif doBasic3D then
-			strcat (str, 'Slabs, Polygons, Blocks, ');
+			lstrcat (str, 36);		!Slabs, Polygons, Blocks, 
 		elsif do3DCurvSurf then
-			strcat (str, 'Curved 3D surfaces & solids, ');
+			lstrcat (str, 37);		!Curved 3D surfaces & solids, 
 		end;
 		if doLin and doLn3 then
-			strcat (str, '2D & 3D Lines, ');
+			lstrcat (str, 38);		!2D & 3D Lines, 
 		elsif doLin then
-			strcat (str, '2D Lines, ');
+			lstrcat (str, 39);		!2D Lines, 
 		elsif doLn3 then
-			strcat (str, '3D Lines, ');
+			lstrcat (str, 40);		!3D Lines, 
 		end;
 		if doPln then
-			strcat (str, 'Polylines, ');
+			lstrcat (str, 41);		!Polylines, 
 		end;
 		if doSym then
-			strcat (str, 'Symbols, ');
+			lstrcat (str, 42);		!Symbols, 
 		end;
 		if doText then
-			strcat (str, 'Text, ');
+			lstrcat (str, 43);		!Text, 
 		end;
 		if doDim then
-			strcat (str, 'Dimensions, ');
+			lstrcat (str, 44);		!Dimensions, 
 		end;
 		if strlen (str) > len then
 			strdel (str, strlen(str)-1, 2);
 		else
-			strcat (str, 'no entity types specified');
+			lstrcat (str, 45);		!no entity types specified
 		end;
 	end;
 END EntTypesStr;
@@ -1230,28 +1221,20 @@ VAR
 	key		: integer;
 	s			: str255;
 BEGIN
-	WrtLvl ('Entity Types');
+	lWrtLvl (24 {Entity Types});
 	EncodeEntTyp (s);
 	repeat
-		wrtmsg ('Choose entity types to cast shadows of');
+		lwrtmsg (46 {Choose entity types to cast shadows of});
 		lblsinit;
-		lblsett (1, 'Basic 3D Ents', doBasic3D);
-		lblmsg (1, 'Process Polygon, Slab, and Block entities');
-		lblsett (2, 'Curved 3D Ents', do3DCurvSurf);
-		lblmsg (2, 'Process Sphere, Dome, Cylinder, Cone, Surface of Rev, Torus, Mesh Surface');
-		lblsett (3, '3D Lines', doLn3);
-		lblmsg (3, 'Process straight and curved 3D Lines such as 3D circles and arcs');
-		lblsett (4, '2D Lines', doLin);
-		lblmsg (4, 'Process 2D lines, circles, arcs, elipses, beziers, b-splines');
-		lblsett (5, 'PolyLine', doPln);
-		lblmsg (5, 'Process Polylines');
-		lblsett (6, 'Symbols', doSym);
-		lblmsg (6, 'Process Symbols (regardless of the types of entity they contain)');
-		lblsett (7, 'Text', doText);
-		lblmsg (7, 'Cast shadows of Text entites');
-		lblsett (8, 'Dimensions', doDim);
-		lblmsg (8, 'Cast shadows of Associative Dimensions');
-		lblset (20, 'Exit');
+		llblsett (1, 25, doBasic3D);
+		llblsett (2, 26, do3DCurvSurf);
+		llblsett (3, 27, doLn3);
+		llblsett (4, 28, doLin);
+		llblsett (5, 29, doPln);
+		llblsett (6, 30, doSym);
+		llblsett (7, 31, doText);
+		llblsett (8, 32, doDim);
+		llblset (20, 13 {Exit});
 		getesc (key);
 		if key = f1 then
 			doBasic3D := not doBasic3D;
@@ -1291,42 +1274,46 @@ VAR
 	ssmode		: mode_type;
 	addr		: entaddr;
 	ent			: entity;
+	allowrename : boolean;
 BEGIN
 	ReDraw;
 	lblsinit;
 	lblson;
 	HighlightSS (entityss, true, false);
 	repeat
-		wrtlvl ('Shadow Entities');
+		AllowRename := false;
+		lwrtlvl (33);	!'Shadow Entities'
 		lblsinit;
 		for i := 0 to 7 do
 			ssGetName (i, name);
-			lblsett (i+1, name, i=entityss);
+			if BlankString (name) then
+				cvintst (i+1, LangParams[1]);
+				LangParams[2] := LangParams[1];
+				lplblsett (i+1, 39, i=entityss,LangParams,2);
+			else
+				AllowRename := true;
+				lblsett (i+1, name, i=entityss);
+			end;
 		end;
 		if entityss >= 0 then
-			lblset (12, 'Add To Set');
-			lblmsg (12, 'Add entities to selection set');
-			lblset (13, 'Del Frm Set');
-			lblmsg (13, 'Remove entities from selection set');
-			lblset (14, 'Clear Set');
-			lblmsg (14, 'Clear selection set');
-			lblset (15, 'Rename');
-			lblmsg (15, 'Rename Selection Set');
-			lblset (18, 'Ent Types');
-			tempstr := 'Select entity types to cast shadows (';
-			EntTypesStr (tempstr);
-			strcat (tempstr, ')');
-			lblmsg (18, tempstr);
+			llblset (12, 34 {Add To Set|Add entities to selection set});
+			llblset (13, 35 {Del From Set|Remove entities from selection set});
+			llblset (14, 36 {Clear Set|Clear selection set});
+			if AllowRename then
+				llblset (15, 37 {Rename|Rename Selection Set});
+			end;
+			LangParams[1] := '';
+			EntTypesStr (LangParams[1]);
+			lplblset (18, 38 {Ent Types|Select entity types to cast shadows ($)}, LangParams, 1);
 		end;
-		lblset (20, 'Exit');
-		wrtmsg ('Choose Selection Set to use for Shadow Entities');
+		llblset (20, 13);
+		lwrtmsg (47);		!Choose Selection Set to use for Shadow Entities
 		lblson;
 		getesc (key);
-		key := fnkeyconv (key);
-		if key = 20 then
+		if key = s0 then
 			return;
-		elsif key >= 1 and key <= 8 then
-			key := key-1;
+		elsif key >= f1 and key <= f8 then
+			key := key-f1;
 			if key=entityss then
 				HighlightSS (entityss, true, false);
 			else
@@ -1335,25 +1322,24 @@ BEGIN
 				HighlightSS (entityss, true, false);
 			end;
 			SaveInt ('ShadEntSlSet', entityss, false);
-		elsif (key = 14) and (entityss >= 0) then
+		elsif (key = s4) and (entityss >= 0) then
 			reDraw;
 			ssClear (entityss);
-		elsif (key = 15) and (entityss >= 0) then
+		elsif (key = s5) and (entityss >= 0) and AllowRename then
 			lblsinit;
 			lblson;
-			ssGetName (entityss, tempstr);
-			strins (tempstr, 'Enter new name for \'', 1);
-			strcat (tempstr, '\':');
-			wrtmsg (tempstr);
+			ssGetName (entityss, langparams[1]);
+			lpwrtmsg (114 {Enter new name for '$':}, langparams, 1);
 			ssGetName (entityss, tempstr);
 			getstr (tempstr, 8);
 			if not BlankString(tempstr) then
 				ssSetName (entityss, tempstr);
 			end;
 			wrtmsg('');
-		elsif (key = 12) and (entityss >= 0) then
+		elsif (key = s2) and (entityss >= 0) then
 			lblsinit;
-			while getmode ('add to Selection Set', ssmode, key) = res_normal do
+			GetMsg (48, tempstr); 	!add to Selection Set
+			while getmode (tempstr, ssmode, key) = res_normal do
 				addr := ent_first (ssmode);
 				WHILE ent_get (ent, addr) DO
 					addr := ent_next (ent, ssmode);
@@ -1363,9 +1349,10 @@ BEGIN
 					end;
 				END;
 			end;
-		elsif (key = 13) and (entityss >= 0) then
+		elsif (key = s3) and (entityss >= 0) then
 			lblsinit;
-			while getmode ('remove from Selection Set', ssmode, key) = res_normal do
+			GetMsg (49, tempstr);		!remove from Selection Set
+			while getmode (tempstr, ssmode, key) = res_normal do
 				addr := ent_first (ssmode);
 				WHILE ent_get (ent, addr) DO
 					addr := ent_next (ent, ssmode);
@@ -1374,69 +1361,49 @@ BEGIN
            end;
  				END;
 			end;
-		elsif (key = 18) then
+		elsif (key = s8) then
 			SelectEntTypes;
 		end;
 	until false;
 END UserSelectSS;
 
-{*}
+
 PROCEDURE HilightSettings;
 BEGIN
 	REPEAT
-		wrtlvl ('Hilite Settings');
+		lwrtlvl (59 {Hilite Settings});
 		lblsinit;
-		lblsett (1, 'Hilite Entities', hlent);
+		llblsett (1, 61 {Hilite Entities|(If not enabled then selected entities will not be hightlighted)}, hlent);
 		if hlent then
-			lblset (2, 'Colour');
-			GetClrName (hlentclr, tempstr);
-			strins (tempstr, 'Entities highlight colour is ', 1);
-			lblmsg (2, tempstr);
-			lblsett (3, 'Increased Wgt', hlentWgt);
-			lblmsg (3, 'Highlight entities with increased weight');
-			lblsett (4, 'Solid Lines', not hlentdash);
-			lblmsg (4, 'Highlighted entities will be shown with solid lines');
-			lblsett (5, 'Dashed Lines', hlentdash);
-			lblmsg (5, 'Highlighted entities will be shown with dashed lines');
+			GetClrName (hlentclr, langparams[1]);
+			lplblset (2, 42 {Colour|Entities highlight colour is $}, langparams, 1);
+			llblsett (3, 43 {Increased Wgt|Highlight entities with increased weight}, hlentWgt);
+			llblsett (4, 44 {Solid Lines|Highlighted entities will be shown with solid lines}, not hlentdash);
+			llblsett (5, 45 {Dashed Lines|Highlighted entities will be shown with dashed lines'}, hlentdash);
 			if hlentdash then
-				lblset (6, 'Line Spacing');
-				cvintst (hlentpx, tempstr);
-				strins (tempstr, 'Line spacing in pixels for highlighted entities (', 1);
-				strcat (tempstr, ')');
-				lblmsg (6, tempstr);
+				cvintst (hlentpx, langparams[1]);
+				lplblset (6, 46 {Line Spacing|Line spacing in pixels for highlighted entities ($)}, langparams, 1);
 			end;
-			lblset (8, 'Show Entities');
-			lblmsg (8, 'Highlight the shadow entities using the appropriate settings');
+			llblset (8, 47 {Show Entities|Highlight the shadow entities now});
 		end;
-		lblsett (11, 'Hilite Surf', hlsurf);
+		llblsett (11, 48 {Hilite Surf|Hilite the shadow surface polygon}, hlsurf);
 		if hlsurf then
-			lblset (12, 'Colour');
-			GetClrName (hlsurfclr, tempstr);
-			strins (tempstr, 'Surface highlight colour is ', 1);
-			lblmsg (12, tempstr);
-			lblsett (13, 'Increased Wgt', hlsurfWgt);
-			lblmsg (13, 'Highlight surface with increased weight');
-			lblsett (14, 'Solid Lines', not hlsurfdash);
-			lblmsg (14, 'Highlighted surface will be shown with solid lines');
-			lblsett (15, 'Dashed Lines', hlsurfdash);
-			lblmsg (15, 'Highlighted surface will be shown with dashed lines');
+			GetClrName (hlsurfclr, langparams[1]);
+			lplblset (2, 42 {Colour|Entities highlight colour is $}, langparams, 1);
+			llblsett (13, 43 {Increased Wgt|Highlight entities with increased weight}, hlsurfWgt);
+			llblsett (14, 44 {Solid Lines|Highlighted entities will be shown with solid lines}, not hlsurfdash);
+			llblsett (15, 45 {Dashed Lines|Highlighted entities will be shown with dashed lines'}, hlsurfdash);
 			if hlsurfdash then
-				lblset (16, 'Line Spacing');
-				cvintst (hlsurfpx, tempstr);
-				strins (tempstr, 'Line spacing in pixels for highlighted surface (', 1);
-				strcat (tempstr, ')');
-				lblmsg (16, tempstr);
+				cvintst (hlsurfpx, langparams[1]);
+				lplblset (16, 46 {Line Spacing|Line spacing in pixels for highlighted entities ($)}, langparams, 1);
 			end;
 			if not zplane then
-				lblset (18, 'Show Surface');
-				lblmsg (18, 'Highlight the surface using the appropriate settings');
+				llblset (18, 49 {Show Surface|Highlight the shadow surface now});
 			else
-				lblset (18, 'Cannot show');
-				lblmsg (18, 'Shadow surface is currently z height (not an entity) and cannot be shown');
+				llblset (18, 50 {Cannot Show|Shadow surface is currently z height (not an entity) and cannot be shown});
 			end;
 		end;
-		lblset (20, 'Exit');
-		lblmsg (20, 'Return to the main Shadow menu');
+		llblset (20, 51 {Back|Return to main Shadow menu});
 		lblson;
 		
 		getesc (key);
@@ -1444,7 +1411,7 @@ BEGIN
 			hlent := not hlent;
 			SaveBln ('HiliteEnt', hlent, true);
 		elsif (key = f2) and hlent then	
-			wrtmsg ('Select highlight colour for entities');
+			lwrtmsg (101 {Select highlight colour for entities});
 			getclr (hlentclr);
 			SaveInt ('HLEntClr', hlentclr, true);
 		elsif (key = f3) and hlent then
@@ -1457,7 +1424,7 @@ BEGIN
 			hlentdash := true;
 			SaveBln ('HLEntDash', hlentdash, true);
 		elsif (key = f6) and hlentdash and hlent then
-			wrtmsg ('Entity Dash Pixels: ');
+			lwrtmsg (102 {Entity Dash Pixels: });
 			getint (hlentpx);
 			SaveInt ('HLEntDashSpc', hlentpx, true);
 		elsif (key = f8) and hlent then
@@ -1469,7 +1436,7 @@ BEGIN
 			return;
 		elsif hlsurf then
 			if key = s2 then
-				wrtmsg ('Select highlight colour for surface');
+				lwrtmsg (103 {Select highlight colour for surface});
 				getclr (hlsurfclr);
 				SaveInt ('HLSurfClr', hlsurfclr, true);
 			elsif key = s3 then
@@ -1482,7 +1449,7 @@ BEGIN
 				hlsurfdash := true;
 				SaveBln ('HLSurfDash', hlsurfdash, true);
 			elsif (key=s6) and hlsurfdash then
-				wrtmsg ('Surface Dash Pixels: ');
+				lwrtmsg (104 {Surface Dash Pixels: });
 				getint (hlsurfpx);
 				SaveInt ('HLSrfDashSpc', hlsurfpx, true);
 			elsif (key = s8) and not zplane then
@@ -2179,9 +2146,9 @@ BEGIN
 	MyLogStr ('Start Shadow Processing');
 	
 	! if we get here then it looks like we are ready to cast shadows
-	wrterr ('Processing shadows ... please wait');
+	lwrterr (111 {Processing shadows ... please wait});
 	if showprogress then
-		wrtmsg ('Calculating surface and sun position');
+		lwrtmsg (51 {Calculating surface and sun position});
 	end;
 	! call GetModMat to create a modelling matrix that will rotate everything so that
 	! the surface is level at a z height of zero - this just makes subsequent calculations
@@ -2374,7 +2341,7 @@ BEGIN
 			mode_enttype(shadmode, entlin);
 		end;
 		if showprogress then
-			wrtmsg ('Creating Symbol');
+			lwrtmsg (54 {Creating Symbol});
 		end;
 		MyLogStr ('Creating symbol:');
 		MyLogStr (symname);
@@ -2397,29 +2364,27 @@ BEGIN
 		shadow.symname := symname;
 		shadow.symmod := invmat;
 		ent_add (shadow);
+		if colour > 0 then
+			shadow.color := colour;
+			ent_update (shadow);
+		end;
 		ent_draw (shadow, drmode_white);
 		MyLogStr ('symbol entity created');
-		cvintst (shadowcreated, str);
-		strins (str, 'Shadows created for ', 1);
+		cvintst (shadowcreated, LangParams[1]);
 
-		if shadowcreated = 1 then
-			strcat (str, ' entity.');
-		else
-			strcat (str, ' entities.');
-			if shadowcreated >= 32750 then
-				msg_ok ('Shadow creation limit of 32,750\rentities was reached.');
-			end;
+		if shadowcreated >= 32750 then
+			lmsg_ok (56);		!Shadow creation limit of 32,750\rentities was reached.
 		end;
-		wrterr (str);
+		lpwrterr (55, LangParams, 1);	!Shadows created for $ entities
 	else
 		wrterr ('');
-		msg_OK ('No shadows cast on this surface by entity(s)');
+		lmsg_OK (57);		!No shadows cast on this surface by entity(s)
 	end;
 	if voidregen and DC191 and VoidsDone then
     regen;    ! the new polyline void builtin procedure can leave underiable artifacts on the screen
 	end;
 	if bigply then
-		msg_OK ('Polygon with more than 36 sides was processed - shadow may not be correct');
+		lmsg_OK (58);		!Polygon with more than 36 sides was processed - shadow may not be correct
 	end;
 	lyr_set (svlyr);
 
@@ -2444,33 +2409,22 @@ PROCEDURE GetShadowLyr;
 VAR
 	CurrLyrFlag : boolean;
 	tempent : entity;
+	offset : integer;
+	SvName : str80;
+	templyr : layer;
 BEGIN
-{*	wrtmsg ('Enter layer to create shadows on: ');
-	GetLyr (lyr);	
-	getlyrname (lyr, lyrname);
 
-	CurrLyrFlag := (strlen(lyrname) = 0);
-	GetLyrCurExistNew ('Shadow Layer', 'Enter layer to create shadows on: ', lyr, CurrLyrFlag, 80);	
-	if CurrLyrFlag then
-		lyrname := '';
-	else
-		getlyrname (lyr, lyrname);
-	end;
-	*}
-	
-{*
-	if strlen(lyrname) > 0 then
-		lyrname := '';
-		return;
-	end;  *}
 	repeat
-		wrtlvl ('Shadow Layer');
+		lwrtlvl (52 {Shadow Layer});
 		lblsinit;
-		lblset (1, 'Lyr Menu');
-		lblmsg (1, 'Choose from layer menu (short layer names only)');
-		lblset (20, 'Exit');
+		llblset (1, 60 {Lyr Menu|Choose from layer menu});
+		llblset (20, 13 {Exit});
 		lblson;
-		wrtmsg ('Enter name of new or existing layer : ');
+		lwrtmsg (105 {Enter name of new or existing layer : });
+		strassign (SvName, lyrname);
+		if not lyr_find (lyrname, templyr) then
+			lyrname := '';	!lyrname may be truncated in some circumstances due to DCALs limited support for long layer names, so do not display it as default if the layer cannot be found based on lyrname
+		end;
 		if DC190 then
 			res := dgetstr (lyrname, 80, key);
 		else
@@ -2478,19 +2432,33 @@ BEGIN
 		end;
 		if res = res_escape then
 			if key = f1 then
-				GetLyr (lyr);
+				offset := 0;
+				svlyr := lyr;
+				repeat
+					res := fGetLyr (offset, key, lyr);
+				until (res = res_normal) or ((res = res_escape) and (key = s0));
+				if res = res_escape then
+					lyr := svlyr;
+					lyrname := SvName;
+				end;
 				getlyrname (lyr, lyrname);
+				SaveLayer ('dhShadLyr', lyr);
 				return;
 			elsif key = s0 then
 				return;
 			end;
 		end;
 		if blankstring(lyrname) then
-			!nothing
+			strassign (lyrname, SvName);
+			return;
 		end;
 		if lyr_find (lyrname, lyr) then
+			SaveLayer ('dhShadLyr', lyr);
+			SaveStr ('dhShadLyrNm', lyrname, false);
 			return;
 		elsif Lyr_Create19 (lyrname, lyr, DC190) then
+			SaveLayer ('dhShadLyr', lyr);
+			SaveStr ('dhShadLyrNm', lyrname, false);
 			return;
 		else
 			msg_OK ('Unable to find or create layer');
@@ -2499,106 +2467,15 @@ BEGIN
 {*}
 END GetShadowLyr;
 
-PROCEDURE HatchSettings;
-VAR
-	SvSpace : real;
-	hatchspaceok : boolean;
-BEGIN
-	repeat
-		SaveInt ('ShadHatchClr', hatchclr, true);
-		lblsinit;
-		wrtlvl ('Hatch Settings');
-		lblsett (1, 'No Hatch', hatchlines = 0);
-		lblmsg (1, 'Shadows will not be hatched');
-		lblsett (2, 'Single Line', hatchlines = 1);
-		lblmsg (2, 'Hatch with a single set of parallel lines');
-		lblsett (3, 'Cross Hatch', hatchlines = 2);
-		lblmsg (3, 'Hatch with 2 sets of parallel lines at right angles to each other');
-		lblsett (4, 'Net3', hatchlines = 3);
-		lblmsg (4, 'Hatch with 3 sets of parallel lines at 60 degrees to each other');
-{*		lblsett (6, 'Solid Fill', hatchlines = 5);
-		lblmsg (6, 'Fill shadows with solid fill (same colour as outline)');  *}
-		if hatchlines > 0 and hatchlines < 5 then
-			lblsett (6, 'Hatch ONLY', hatchonly);
-			lblmsg (6, 'Draw the hatch only (do NOT draw any shadow outlines)');
-			lblsett (9, 'Outln Clr', hatchclr < 0);
-			lblmsg (9, 'Hatch the same colour as the shadow outlines');
-			lblsett (10, 'Set Clr', hatchclr >= 0);
-			if hatchclr >= 0 then
-				GetClrName (hatchclr, tempstr);
-				strins (tempstr, 'Set hatch colour (', 1);
-				strcat (tempstr, ')');
-			else
-				tempstr := 'Set hatch colour';
-			end;
-			lblmsg (10, tempstr);
-
-			lblset (12, 'Spacing');
-			cvdisst (hatchspace, tempstr);
-			strins (tempstr, 'Set spacing between hatch lines (', 1);
-			strcat (tempstr, ')');
-			lblmsg (12, tempstr);
-			lblset (13, 'Angle');
-			cvangst (hatchang, tempstr);
-			strins (tempstr, 'Hatch angle relative to suns rays (', 1);
-			strcat (tempstr, ')');
-			lblmsg (13, tempstr);
-		end;
-		lblset (20, 'Exit');
-		lblson;
-		
-		getesc (key);
-		if (key >= f1)and (key <= F4) then
-			hatchlines := fnkeyconv(key)-1;
-			SaveInt ('ShadHtchLins', hatchlines, true);
-		elsif key = s0 then
-			return;
-		elsif hatchlines > 0 then
-			if key = f6 then
-				hatchonly := not hatchonly;
-				SaveBln ('ShadHtchOnly', hatchonly, false);
-			elsif key = f9 then
-				hatchclr := -absi(hatchclr);
-			elsif key = f0 then
-				hatchclr := absi(hatchclr);
-				getclr (hatchclr);
-			elsif (hatchlines < 4) then
-				if (key = s2) then
-					repeat
-						wrtmsg ('Enter hatch spacing: ');
-						SvSpace := hatchspace;
-						getdis (hatchspace);
-						if hatchspace < 0.0 then
-							hatchspace := -hatchspace;
-						end;
-						if (hatchspace < 1.0) then
-							hatchspace := SvSpace;
-							msg_ok ('Hatch spacing too small.  Must be at least 1/32" (0.8mm).');
-							hatchspaceok := false;
-						else
-							hatchspaceok := true;
-						end;
-					until hatchspaceok;
-					wrtmsg ('');
-					SaveRl ('ShadHtchSpcg', hatchspace, true);
-				elsif key = s3 then
-					wrtmsg ('Enter hatch angle (relative to suns rays): ');
-					getang (hatchang);
-					wrtmsg ('');
-					SaveRl ('ShadHtchAngl', hatchang, true);
-				end;
-			end;
-		end;
-	until false;
-END HatchSettings;
 
 PROCEDURE Initialise;
 VAR
 	i	: integer;
 	r	: real;
 	s : str80;
+	templyr : layer;
 BEGIN
-	ver := 'v1.1.10';
+	ver := 'v1.2.00';
 	namever := 'Shadow ';
 	strcat (namever, ver);
 	strcat (namever, '   Copyright D Henderson 2017.');
@@ -2607,7 +2484,7 @@ BEGIN
 
 	setpoint (origin, 0.0);		! origin is effectively a constant - do not change it!
 	showprogress := false; ! disabled as update of progress display was unreliable, even though processing was proceeding ok
-	
+	LangInit ('Shadow');
 	initSettings ('Shadow');
 	InitLog ('Shadow');
 
@@ -2622,19 +2499,6 @@ BEGIN
 	end;
 
 	colour := GetSvdInt ('ShadColour', -1);
-	hatchclr := GetSvdInt('ShadHatchClr', -1);
-	hatchlines := GetSvdInt ('ShadHtchLins', 0);
-	if (hatchlines > 0) and (hatchlines < 5) then
-		hatchlines := 0;		!disable hatch in this version as it is not reliable
-	end;
-	hatchonly := GetSvdBln ('ShadHtchOnly', false);
-	if (scaletype < 6) and (scaletype <> 3) then
-		r := 192.0;	! default to 6 inches
-	else
-		r := 188.9763779527559;	! default to 15cm
-	end;
-	hatchspace := GetSvdRl ('ShadHtchSpcg', r ); 
-	hatchang := GetSvdAng ('ShadHtchAngl', 0.0);
 
   entityss := GetSvdInt ('ShadEntSlSet', -1);
 
@@ -2720,6 +2584,20 @@ BEGIN
 	hlsurfWgt := GetSvdBln ('HLSurfWeight', true);
 	hlsurfdash := GetSvdBln ('HLSurfDash', true);
 	hlsurfpx := GetSvdInt ('HLSrfDashSpc', 26);
+	if GetSvdLyr ('dhShadLyr', lyr) then
+		GetSvdStr ('dhShadLyrNm', '', lyrname);
+		if strlen (lyrname) > 0 then
+			if lyr_find (lyrname, templyr) then
+				if templyr <> lyr then
+					getlyrname (lyr, lyrname);
+				end;
+			end;
+		else
+			getlyrname (lyr, lyrname);
+		end;
+	else
+		lyrname := '';
+	end;
 END Initialise;
 
 BEGIN
@@ -2727,145 +2605,92 @@ BEGIN
 
 	done := false;
 	REPEAT
-		wrtlvl ('Shadow');
+		lwrtlvl (1 {Shadow});
 		if supressinfo then 
 			supressinfo := false;
 		else
+			strassign (langparams[1], sunposmsg);
 			if colour > 0 then
-				GetClrName (colour, tempstr);
-				strins (tempstr, 'Shadows drawn in ', 1);
+				GetClrName (colour, langparams[3]);
 			else
-				tempstr := 'Shadows drawn current clr';
+				GetMsg (107 {(current)}, langparams[3]);
 			end;
-			strcat (tempstr, ' on ');
 			if strlen (lyrname) > 0 then
-				strcat (tempstr, lyrname);
-				strcat (tempstr, ' layer');
+				strassign (langparams[2], lyrname);
 			else
-				strcat (tempstr, 'active layer');
+				GetMsg (107 {(current)}, langparams[2]);
 			end;
-			wrterr (tempstr);
+			lpwrterr (106 {?. Lyr=?, Clr=?}, langparams, 3);
 		end;
 		wrtmsg(namever);
 		lblsinit;
-		lblset (1, 'North');
-		cvangst (north, str);
-		lblmsg (1, str);
-		lblset (2, 'Sun Position');
-		str := 'Set azimuth & altitude (currently ';
+		cvangst (north, LangParams[1]);
+		lplblset (1, 2 {North|$}, LangParams, 1);
 		if strlen(sunposmsg) > 0 then
-			strcat (str, sunposmsg);
+			strassign (LangParams[1], sunposmsg);
 		else
-			cvangst (azimuth, str1);
-			strcat (str, str1);
-			strcat (str, ' and ');
-			cvangst (altitude, str1);
-			strcat (str, str1);
+			cvangst (azimuth, LangParams[1]);
+			strcat (LangParams[1], ', ');
+			cvangst (altitude, str);
+			strcat (LangParams[1], str);
 		end;
-		strcat (str, ')');
-		lblmsg (2, str);
+		lplblset (2, 3 {Sun Position|Set azimuth & altitude (currently $)}, LangParams, 1);
 		
-		lblset (3, 'Sun-eye view');
-		lblmsg (3, 'Set viewing projection to view from the sun position');
+		llblset (3, 4 {Sun-eye View|Set viewing projection to view from the sun position});
 		
-		lblset (5, 'Entities');
 		if entityss >=0 then
-			ssGetName (entityss, tempstr);
-			strcat (tempstr, ': ');
-			EntTypesStr (tempstr);
+			ssGetName (entityss, LangParams[1]);
+			LangParams[2] := '';
+			EntTypesStr (LangParams[2]);
+			lplblset (5, 6 {Entities|Select entities to cast shadows of ($: $)}, LangParams, 2);
 		else
-			tempstr := 'not set';
+			llblset (5, 5 {Entities|Select entities to cast shadows of (not set)});
 		end;
-		strins (tempstr, 'Select entities to cast shadows (', 1);
-		strcat (tempstr, ')');
-		lblmsg (5, tempstr);
 
-		lblset (6, 'Hilite');
-		lblmsg (6, 'Highlight Surface and Entities');
+		llblset (6, 7 {Hilite|Highlight Surface and Entities});
 
-		lblset (7, 'Surface');
-		tempstr := 'Define surface shadows are cast onto (';
 		if zplane then
-			strcat (tempstr, 'horizontal plane at ');
-			cvdisst (zheight, str);
-			if zheight < 0.0 then
-				strcat (tempstr, '-');
-			end;
-			strcat (tempstr, str);
-			strcat (tempstr, ')');
+			cvdisst (zheight, LangParams[1]);
+			lplblset (7, 8 {Surface|Define surface shadows are cast onto (horizontal plane at $)}, LangParams, 1);
 		else
-			strcat (tempstr, 'polygon selected)');
+			llblset (7, 9 {Surface|Define surface shadows are cast onto (polygon selected)});
 		end;
-		lblmsg (7, tempstr);
 		
 		if not zplane then
-			lblsett (8, 'Trim Shadow', trim);
-			lblmsg (8, 'Trim Shadow to surface polygon');
+			llblsett (8, 10 {Trim Shadow|Trim Shadow to surface polygon}, trim);
 		end;
 		
-		lblsett (10, 'Solid Fill', hatchlines = 5);
-		lblmsg (10, 'Solid Fill the shadows');
-		{*
-		lblsett (12, 'Hatch', (hatchlines>0) and (hatchlines<4));
-		tempstr := 'Hatch the shadows';
-		if hatchlines = 1 then
-			strcat (tempstr, ' (single lines)');
-		elsif hatchlines = 2 then
-			strcat (tempstr, ' (Cross Hatch)');
-		elsif hatchlines = 3 then
-			strcat (tempstr, ' (Net3)');
-		end;
-		if (hatchlines) > 0 and (hatchlines < 4) and (hatchclr >= 0) then
-			GetClrName (hatchclr, str);
-			strins (str, ', ', 1);
-			strins (tempstr, str, strlen(tempstr));
-			if hatchonly then
-				strins (tempstr, 'Hatch ONLY. ', 1);
-			end;
-		end;
-		lblmsg (12, tempstr);
-*}
+		llblsett (10, 53 {Solid Fill|Solid Fill the shadows}, hatchlines = 5);
+
 		if DC191 then
-			lblsett (11, 'Cover', doCover);
-			lblmsg (11, 'Add a cover to shadow polylines');
+			llblsett (11, 54 {Cover|Add a cover to shadow polylines}, doCover);
 		end;
 		
-		lblsett (13, 'Spec Clr', colour >= 0);
-		tempstr := 'Specify a colour to draw shadows';
 		if colour > 0 then
-			GetClrName (colour, str);
-			strcat (tempstr, ' (');
-			strcat (tempstr, str);
-			strcat (tempstr, ')');
-		end;
-		lblmsg (13, tempstr);
-		
-		lblsett (14, 'Curr Clr', colour < 0 and colour > -1000);
-		lblmsg (14, 'Shadows will be drawn in the current colour');
-		
-{*		lblsett (15, 'Ent Clr', colour < -1000);
-		lblmsg (15, 'Shadow will be drawn the same colour as the entity casting it');
-*}		
-		lblsett (15, 'Spec Layer', strlen(lyrname) > 0);
-		tempstr := 'Specify a layer to draw shadows on (';
-		if strlen (lyrname) > 0 then
-			strcat (tempstr, lyrname);
+			GetClrName (colour, langparams[1]);
+			strins (langparams[1], '(', 1);
+			strcat (langparams[1], ')');
 		else
-			strcat (tempstr, 'active layer');
+			langparams[1] := '';
 		end;
-		strcat (tempstr, ')');
-		lblmsg (15, tempstr);
+		lplblsett (13, 55 {Spec Clr|Specify a colour to draw shadows $}, colour >= 0, langparams, 1);
 		
-		lblsett (16, 'Active Layer', strlen(lyrname) = 0);
-		lblmsg (16, 'Draw shadows on the currently active layer');
-
-		lblset (18, 'Start');
-		lblmsg (18, 'Generate shadows for selected entities');
-
-		lblset (19, 'Help / About');
-		lblmsg (19, 'Display information about this macro, and a link to the Instruction Document.');
+		llblsett (14, 56 {Curr Clr|Shadows will be drawn in the current colour}, colour < 0 and colour > -1000);
 		
-		lblset (20, 'Exit');
+		if strlen (lyrname) > 0 then
+			strassign (langparams[1], lyrname);
+		else
+			GetMsg (113 {Active Layer}, langparams[1]);
+		end;
+		lplblsett (15, 57 {Spec Layer|Specify a layer to draw shadows on ($)}, strlen(lyrname) > 0, langparams, 1);
+		
+		llblsett (16, 58 {Active Layer|Draw shadows on the currently active layer}, strlen(lyrname) = 0);
+
+		llblset (18, 11 {Start|Generate shadows for selected entities});
+
+		llblset (19, 12 {Help / About|Display information about this macro, and a link to the Instruction Document});
+		
+		llblset (20, 13 {Exit});
 
 		lblson;
 		
@@ -2903,14 +2728,6 @@ BEGIN
 				HatchLines := 5;
 			end;
 			SaveInt ('ShadHtchLins', hatchlines, true);
-{* disable hatch in this version as it is unreliable
-		ELSIF key = s2 THEN
-			if HatchLines > 3 then
-				HatchLines := 0;
-			end;
-			HatchSettings;
-			SaveInt ('ShadHtchLins', hatchlines, true);
-*}
 		ELSIF key = s1 THEN
 			doCover := not doCover;
 			SaveBln ('DoCover', doCover, true);
@@ -2922,12 +2739,7 @@ BEGIN
 				colour := colour+1000;
 			end;
 			SaveInt ('ShadColour', colour, true);
-{*		ELSIF key = s5 THEN
-			colour := -absi(colour);
-			if colour > -1000 then
-				colour := colour-1000;
-			end;
-			SaveInt ('ShadColour', colour, true);	*}
+
 		ELSIF key = s5 THEN
 			GetShadowLyr;
 		ELSIF key = s6 THEN	

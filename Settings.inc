@@ -31,3 +31,7 @@ PROCEDURE SaveStr (name : string;  value : string; toini : boolean);		EXTERNAL;
 PROCEDURE GetIniStr (name : string; default : string; result : OUT str80);		EXTERNAL;
 
 PROCEDURE GetSvdStr (name : string; default : string; result : OUT str80 );		EXTERNAL;
+
+PROCEDURE SaveLayer (name : string; lyr : IN OUT layer); EXTERNAL;
+
+FUNCTION GetSvdLyr (name : string; lyr : OUT layer) : boolean; 	EXTERNAL;

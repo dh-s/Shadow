@@ -23,6 +23,73 @@ BEGIN
 
 END BlankString;
 
+
+PROCEDURE SafeStrCat (str1 : IN OUT string; str2 : string);	PUBLIC;
+! (only safe if str1 is 255 long)
+VAR
+	tempstr : str255;
+	logfile : file;
+	res	: integer;
+BEGIN
+	IF strlen(str1) + strlen(str2) <= 255 THEN
+		strcat (str1, str2);
+		return;
+	END;
+	
+	res := f_open (logfile, 'Blocker.log', true, fmode_write);
+	res := f_wrstr (logfile, 'STRCAT TOO LONG');
+	res := f_wrln (logfile);
+	res := f_wrstr (logfile, ' Str1: ');
+	res := f_wrstr (logfile, str1);
+	res := f_wrln (logfile);
+	res := f_wrstr (logfile, ' Str2: ');
+	res := f_wrstr (logfile, str2);
+	res := f_close (logfile);	
+	
+	strassign (tempstr, str2);
+	while strlen(str1) + strlen(tempstr) > 255 do
+		strdel (tempstr, strlen(tempstr), 1);
+	end;
+	strcat (str1,tempstr);
+END SafeStrCat;
+
+PROCEDURE SafeStrIns (dest : IN OUT string; source : string; pos : integer);	PUBLIC;
+VAR
+	tempstr : str255;
+	logfile : file;
+	res : integer;
+BEGIN
+	IF strlen(dest) + strlen(source) <= 255 THEN
+		if pos > strlen (dest) then
+			strcat (dest, source);
+		else
+			strins (dest, source, pos);
+		end;
+		return;
+	END;
+	
+	res := f_open (logfile, 'Blocker.log', true, fmode_write);
+	res := f_wrstr (logfile, 'STRINS TOO LONG');
+	res := f_wrln (logfile);
+	res := f_wrstr (logfile, ' Dest: ');
+	res := f_wrstr (logfile, dest);
+	res := f_wrln (logfile);
+	res := f_wrstr (logfile, ' Source: ');
+	res := f_wrstr (logfile, source);
+	res := f_close (logfile);	
+	
+	IF strlen (dest) = 255 THEN
+		return;
+	END;
+	
+	strassign (tempstr, source);
+	while strlen(dest) + strlen(tempstr) > 255 do
+		strdel (tempstr, strlen(tempstr), 1);
+	end;
+	strins (dest,tempstr, pos);
+END SafeStrIns;
+
+
 FUNCTION StartsWith (target : IN string; prefix : IN string; casesensitive : boolean) : boolean;	PUBLIC;
 VAR
 	i : integer;

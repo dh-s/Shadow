@@ -1,0 +1,348 @@
+MODULE Language;
+
+# INCLUDE 'Errutil.inc'
+# INCLUDE 'Strutil.inc'
+
+PROCEDURE msg_OK (msg : str255); BUILTIN 245;
+FUNCTION msg_dlg (msg : str255; msgDlgType : integer; msgDlgButtons : integer) : integer; BUILTIN 246;
+
+CONST
+	MsgSize = 120;
+	LblSize = 70;
+	
+VAR
+	Msgs : array [1 .. MsgSize] of string(255);
+	Lbls : array [1 .. LblSize] of string(100); 
+
+	
+PROCEDURE PutParams (str : IN OUT string; params : array of str80; nparam : integer);
+VAR
+	ndx, pndx : integer;
+BEGIN
+	pndx := 0;
+	ndx := strpos ('$' ,str, 1);
+	while ndx > 0 do
+		strdel (str, ndx, 1);
+		pndx := pndx+1;
+		if ndx > strlen(str) then
+			if pndx <= nparam then
+				SafeStrCat (str, params[pndx]);
+			else
+				SafeStrCat (str, '???');
+			end;
+		else
+			if pndx <= nparam then
+				SafeStrIns (str, params[pndx], ndx);
+			else
+				SafeStrIns (str, '???', ndx);			
+			end;
+		end;
+		ndx := strpos ('$', str, ndx + strlen(params[pndx]));
+	end;
+END PutParams;
+
+PROCEDURE GetMsgParams (MsgNdx : integer; params : array of str80; nparam : integer; msg : IN OUT string); PUBLIC;
+BEGIN
+	if (MsgNdx > MsgSize) or (MsgNdx < 1) then
+		msg := '***';
+		return;
+	end;
+	! replace $ with parameters
+	strassign (msg, Msgs[MsgNdx]);
+	PutParams (msg, params, nparam);
+END GetMsgParams;
+
+PROCEDURE GetMsg (MsgNdx : integer; msg : IN OUT string); PUBLIC;
+BEGIN
+	if (MsgNdx > MsgSize) or (MsgNdx < 1) then
+		msg := '***';
+	else
+		strassign (msg, Msgs[MsgNdx]);
+	end;
+END GetMsg;
+
+PROCEDURE lStrCat (str : IN OUT string; MsgNdx : integer); PUBLIC;
+VAR
+	mystr : str255;
+BEGIN
+	GetMsg (MsgNdx,mystr);
+	SafeStrCat (str, mystr);
+END lStrCat;
+
+PROCEDURE lpMsg_OK (MsgNdx : integer; params : array of str80; nparam : integer); PUBLIC;
+VAR
+	str : str255;
+	ndx	: integer;
+BEGIN
+	GetMsg (MsgNdx, str);
+	ndx := strpos ('|', str, 1);
+	while ndx > 0 do
+		strdel (str, ndx, 1);
+		if ndx > strlen(str) then
+			SafeStrCat (str, '\r');
+		else
+			SafeStrIns (str, '\r', ndx);
+		end;
+		ndx := strpos ('|', str, ndx);
+	end;
+	
+	PutParams (str, params, nparam);
+
+	Msg_OK (str);
+END lpMsg_OK;
+
+PROCEDURE lMsg_OK (MsgNdx : integer); PUBLIC;
+VAR
+	Dummy : array [1..1] of str80;
+BEGIN
+	lpMsg_OK (MsgNdx, Dummy, 0);
+END lMsg_OK;
+
+FUNCTION lpMsg_Confirm (MsgNdx : integer; params : array of str80; nparam : integer) : boolean; PUBLIC;
+VAR
+	str : str255;
+	ndx	: integer;
+BEGIN
+	GetMsg (MsgNdx, str);
+	ndx := strpos ('|', str, 1);
+	while ndx > 0 do
+		strdel (str, ndx, 1);
+		if ndx > strlen(str) then
+			SafeStrCat (str, '\r');
+		else
+			SafeStrIns (str, '\r', ndx);
+		end;
+		ndx := strpos ('|', str, ndx);
+	end;
+	
+	PutParams (str, params, nparam);
+	
+	return (msg_dlg (str, 4, 2) <> 3);
+	
+END lpMsg_Confirm;
+
+FUNCTION lMsg_Confirm (MsgNdx : integer) : boolean; PUBLIC;
+VAR
+	Dummy : array [1..1] of str80;
+BEGIN
+	return lpMsg_Confirm (MsgNdx, Dummy, 0);
+END lMsg_Confirm;
+
+PROCEDURE lwrtmsg (MsgNdx : integer); PUBLIC;
+VAR
+	str : str255;
+BEGIN
+	GetMsg (MsgNdx, str);
+	wrtmsg (str);
+END lwrtmsg;
+	
+PROCEDURE lpwrtmsg (MsgNdx : integer; params : array of str80; nparam : integer); PUBLIC;
+VAR
+	str : str255;
+BEGIN
+	GetMsgParams (MsgNdx, params, nparam, str);
+	wrtmsg (str);
+END lpwrtmsg;
+
+PROCEDURE lwrterr (MsgNdx : integer); PUBLIC;
+VAR
+	str : str80;
+BEGIN
+	GetMsg (MsgNdx, str);
+	wrterr (str);
+END lwrterr;
+	
+PROCEDURE lpwrterr (MsgNdx : integer; params : array of str80; nparam : integer); PUBLIC;
+VAR
+	str : str255;
+BEGIN
+	GetMsgParams (MsgNdx, params, nparam, str);
+	wrterr (str);
+END lpwrterr;
+	
+	
+PROCEDURE lprintstr (MsgNdx : integer; col, row, color, cursor : integer; inverse : boolean); PUBLIC;
+VAR
+	str : str255;
+BEGIN
+	GetMsg (MsgNdx, str);
+	printstr (str, col, row, color, cursor, inverse);
+END lprintstr;
+	
+	
+PROCEDURE GetLblParams (LblNdx : integer; params : array of str80; nparam : integer; lbl, msg : IN OUT string);
+var
+	str : str255;
+	ndx, pndx : integer;
+BEGIN
+	! check that LblNdx is in the allowable range
+	if (LblNdx > LblSize) or (LblNdx < 1) then
+		lbl := '***';
+		msg := '';
+		return;
+	end;
+	
+	! replace $ with parameters
+	strassign (str, Lbls[LblNdx]);
+	PutParams (str, params, nparam);
+	
+	!split into lbl & msg based on pipe character
+	ndx := strpos ('|', str, 1);
+	if (ndx > 21) or ((ndx = 0) and (strlen(str) > 20)) then
+		strsub (str,1, 20, lbl);
+	elsif ndx = 0 then
+		strassign (lbl, str);
+	else
+		strsub (str, 1, ndx-1, lbl);
+	end;
+	if ndx > 0 then
+		strdel (str, 1, ndx);
+		if strlen (str) > 120 then
+			strsub (str, 1, 120, msg);
+		else
+			strassign (msg, str);
+		end;
+	else
+		msg := '';
+	end;
+END GetLblParams;
+	
+PROCEDURE lpwrtlvl (LblNdx : integer; params : array of str80; nparam : integer);		PUBLIC;
+var
+	msgstr : string(120);
+	lblstr  : string(20);
+BEGIN
+	GetLblParams (LblNdx, params, nparam, lblstr, msgstr);
+	wrtlvl (lblstr);
+END lpwrtlvl;	
+	
+PROCEDURE lwrtlvl (LblNdx : integer);		PUBLIC;
+var
+	msgstr : string(120);
+	lblstr  : string(20);
+	dummy   : array [1..1] of str80;
+BEGIN
+	GetLblParams (LblNdx, dummy, 0, lblstr, msgstr);
+	wrtlvl (lblstr);
+END lwrtlvl;	
+
+PROCEDURE GetLvl (LblNdx : integer; Lvl : IN OUT string); PUBLIC;
+VAR
+	msgstr : string(120);
+	lblstr  : string(20);
+	dummy   : array [1..1] of str80;
+BEGIN
+	GetLblParams (LblNdx, dummy, 0, lblstr, msgstr);
+	strassign (Lvl, lblstr);
+END GetLvl;
+	
+PROCEDURE lplblset (KeyNdx, LblNdx : integer; params : array of str80; nparam : integer);		PUBLIC;
+var
+	msgstr : string(120);
+	lblstr  : string(20);
+BEGIN
+	GetLblParams (LblNdx, params, nparam, lblstr, msgstr);
+	lblset (KeyNdx, lblstr);
+	lblmsg (KeyNdx, msgstr);
+END lplblset;
+
+PROCEDURE llblset (KeyNdx, LblNdx : integer);		PUBLIC;
+var
+	msgstr : string(120);
+	lblstr  : string(20);
+	dummy   : array [1..1] of str80;
+BEGIN
+	GetLblParams (LblNdx, dummy, 0, lblstr, msgstr);
+	lblset (KeyNdx, lblstr);
+	lblmsg (KeyNdx, msgstr);
+END llblset;	
+
+PROCEDURE lplblsett (KeyNdx, LblNdx : integer; toggle : boolean; params : array of str80; nparam : integer);		PUBLIC;
+var
+	msgstr : string(120);
+	lblstr  : string(20);
+BEGIN
+	GetLblParams (LblNdx, params, nparam, lblstr, msgstr);
+	lblsett (KeyNdx, lblstr, toggle);
+	lblmsg (KeyNdx, msgstr);
+END lplblsett;
+
+PROCEDURE llblsett (KeyNdx, LblNdx : integer; toggle : boolean);		PUBLIC;
+var
+	msgstr : string(120);
+	lblstr  : string(20);
+	dummy   : array [1..1] of str80;
+BEGIN
+	GetLblParams (LblNdx, dummy, 0, lblstr, msgstr);
+	lblsett (KeyNdx, lblstr, toggle);
+	lblmsg (KeyNdx, msgstr);
+END llblsett;
+
+PROCEDURE CompoundMsg (Ndx1, Ndx2 : integer; params : array of str80; nparam : integer);		PUBLIC;
+VAR
+	myparams : array[1..1] of str80;
+BEGIN
+	GetMsgParams (Ndx1, params, nparam, myparams[1]);
+	lpwrtmsg (Ndx2, myparams, 1);
+END CompoundMsg;
+
+PROCEDURE LangInit (FileName : string); 	PUBLIC;
+VAR
+	TempStr	: str255;
+	fl			: file;
+	flstring : string(200);
+	i	, ndx	: integer;
+	res			: integer;
+BEGIN
+	getpath (TempStr, pathsup);
+	SafeStrCat (TempStr, 'dhsoftware\\');
+	SafeStrCat (TempStr, FileName);
+	SafeStrCat (TempStr, '.msg');
+	if not DisplayFileError (f_open (fl, TempStr, true, fmode_read), 'opening msg file') then
+		i := 0;
+		res := f_rdstr (fl, flstring);
+		while (i < MsgSize) and (res = fl_ok) do
+			i := i+1;
+			strassign (Msgs[i], flstring);
+			res := f_rdln(fl);
+			if res = fl_ok then
+				if (i = 89) then
+					flstring := '';
+				elsif f_rdstr (fl, flstring) <> fl_ok then
+					flstring := '***';
+				end;
+			end;
+		end;
+	end;
+	res := f_close (fl);
+	while i < MsgSize do
+		i := i+1;
+		Msgs[i] := '***';
+	end;
+	
+	getpath (TempStr, pathsup);
+	SafeStrCat (TempStr, 'dhsoftware\\');
+	SafeStrCat (TempStr, FileName);
+	SafeStrCat (TempStr, '.lbl');
+	if not DisplayFileError (f_open (fl, TempStr, true, fmode_read), 'opening lbl file') then
+		i := 0;
+		res := f_rdstr (fl, TempStr);
+		while (i < LblSize) and (res = fl_ok) do
+			i := i+1;
+			strassign (Lbls[i], TempStr);
+			res := f_rdln(fl);
+			if res = fl_ok then
+				res := f_rdstr (fl, TempStr);
+			end;
+		end;
+	end;
+	res := f_close (fl);
+
+	while i < LblSize do
+		i := i+1;
+		Lbls[i] := '***';
+	end;
+
+END LangInit;
+
+END Language.

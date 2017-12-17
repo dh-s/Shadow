@@ -251,9 +251,32 @@ BEGIN
 	end;
 END GetSvdStr;
 
+PROCEDURE SaveLayer (name : string; lyr : IN OUT layer); PUBLIC;
+BEGIN
+	if atr_sysfind (name, atr) then
+		if atr.atrtype = atr_addr then
+			atr.lgladdr := lgl_addr(lyr);
+			atr_update (atr);
+			return;
+		else
+			atr_delsys (atr);
+		end;
+	end;
+	atr_init (atr, atr_addr);
+	atr.name := name;
+	atr.lgladdr := lgl_addr(lyr);
+	atr_add2sys (atr);
+END SaveLayer;
 
-
-
-
+FUNCTION GetSvdLyr (name : string; lyr : OUT layer) : boolean; 	PUBLIC;
+BEGIN
+	if atr_sysfind (name, atr) then
+		if atr.atrtype = atr_addr then
+			lyr := layer(atr.lgladdr);
+			return true;
+		end;
+	end;
+	return false;
+END GetSvdLyr;
 
 END Settings.
