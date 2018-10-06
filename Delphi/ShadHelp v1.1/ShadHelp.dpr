@@ -1,8 +1,8 @@
-program NewShadHelp;
+program ShadHelp;
 
 uses
   Vcl.Forms,
-  Unit1 in 'C:\Users\David\Documents\Embarcadero\Studio\Projects\Unit1.pas' {Shadow};
+  Unit1 in 'Unit1.pas' {Shadow};
 
 {$R *.res}
 

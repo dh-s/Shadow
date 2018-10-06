@@ -1,0 +1,4 @@
+Can now select a shadow surface in any view (previously it forced you to plan view when selecting surface)
+Some minor changes to the layer menu (you can now cancel out of the menu without making a selection)
+All messages and function key labels are now stored in seperate files (making translation to other languages easy)
+Set colour of created symbols so that correct shadow colour is retained if the symbol is exploded

@@ -32,6 +32,7 @@ PROGRAM Shadow;
 # INCLUDE '..\\..\\Inc\\_misc.inc'
 # INCLUDE '..\\..\\Inc\\_hatch.inc'	
 # INCLUDE '..\\..\\Inc\\_input.inc'	
+# INCLUDE '..\\..\\Inc\\_math.inc'	
 
 # INCLUDE 'pntutil.inc'
 # INCLUDE 'Errutil.inc'
@@ -114,6 +115,8 @@ VAR
 	supressinfo: boolean;
 
 	LangParams	: array [1..6] of str80;
+	shadr : entaddr;
+	shent : entity;
 
 
 PROCEDURE msg_OK (msg : str255); BUILTIN 245;
@@ -2322,54 +2325,76 @@ BEGIN
 
 		stopgroup;	! stop the group for shadow entites
 
-		! create a symbol to contain all the shadows that are currently transformed by mat
-		! (the symbol itself will be rotated back into position using invmat once it is inserted)
-		SetShadSymbolName (symname);
-		mode_init (shadmode);
-		mode_group (shadmode, shadow);
-		if (hatchlines > 0) and (hatchlines < 4) and hatchonly then
-			ssClear (ssNum);
-			addr := ent_first (shadmode);
-			while ent_get (ent, addr) do
-				if ent.enttype <> entlin then
-					ssAdd (ssNum, ent);
-				end;
-				addr := ent_next (ent, shadmode);
-			end;
+		
+			if true then
+				stopgroup;	! stop the group for shadow entites
+				mode_init (shadmode);
+				mode_group (shadmode, shadow);
+				MyLogStr ('Rotating Entities into place');
+				shadr := ent_first (shadmode);
+				WHILE ent_get (shent, shadr) DO
+					if ent_tranok (shent) then
+						ent_tran (shent, invmat, false, true);
+						LogStrInt ('Transforming ', shent.enttype);
+					else
+						LogStrInt ('No transform ', shent.enttype);
+					end;
+					ent_draw (shent, drmode_white);
+					shadr := ent_next (shent, shadmode);
+				END;
+			else
+
+			
+			
+			! create a symbol to contain all the shadows that are currently transformed by mat
+			! (the symbol itself will be rotated back into position using invmat once it is inserted)
+			SetShadSymbolName (symname);
 			mode_init (shadmode);
 			mode_group (shadmode, shadow);
-			mode_enttype(shadmode, entlin);
-		end;
-		if showprogress then
-			lwrtmsg (54 {Creating Symbol});
-		end;
-		MyLogStr ('Creating symbol:');
-		MyLogStr (symname);
-		setpoint (ref, 0.0);
-		sym_create (sym, shadmode, ref, symname, true, true);
-		MyLogStr ('Symbol created, creating symbol entity');
-		if (hatchlines > 0) and (hatchlines < 4) and hatchonly then
-			mode_init (shadmode);
-			mode_ss(shadmode, ssNum);
-			addr := ent_first (shadmode);
-			while ent_get (ent, addr) do
-				ent_draw (ent, drmode_black);
-				ent_del (ent);
-				addr := ent_next (ent, shadmode);
+			if (hatchlines > 0) and (hatchlines < 4) and hatchonly then
+				ssClear (ssNum);
+				addr := ent_first (shadmode);
+				while ent_get (ent, addr) do
+					if ent.enttype <> entlin then
+						ssAdd (ssNum, ent);
+					end;
+					addr := ent_next (ent, shadmode);
+				end;
+				mode_init (shadmode);
+				mode_group (shadmode, shadow);
+				mode_enttype(shadmode, entlin);
 			end;
-			ssClear (ssNum);
-		end;
+			if showprogress then
+				lwrtmsg (54 {Creating Symbol});
+			end;
+			MyLogStr ('Creating symbol:');
+			MyLogStr (symname);
+			setpoint (ref, 0.0);
+			sym_create (sym, shadmode, ref, symname, true, true);
+			MyLogStr ('Symbol created, creating symbol entity');
+			if (hatchlines > 0) and (hatchlines < 4) and hatchonly then
+				mode_init (shadmode);
+				mode_ss(shadmode, ssNum);
+				addr := ent_first (shadmode);
+				while ent_get (ent, addr) do
+					ent_draw (ent, drmode_black);
+					ent_del (ent);
+					addr := ent_next (ent, shadmode);
+				end;
+				ssClear (ssNum);
+			end;
 
-		ent_init (shadow, entsym);
-		shadow.symname := symname;
-		shadow.symmod := invmat;
-		ent_add (shadow);
-		if colour > 0 then
-			shadow.color := colour;
-			ent_update (shadow);
+			ent_init (shadow, entsym);
+			shadow.symname := symname;
+			shadow.symmod := invmat;
+			ent_add (shadow);
+			if colour > 0 then
+				shadow.color := colour;
+				ent_update (shadow);
+			end;
+			ent_draw (shadow, drmode_white);
+			MyLogStr ('symbol entity created');
 		end;
-		ent_draw (shadow, drmode_white);
-		MyLogStr ('symbol entity created');
 		cvintst (shadowcreated, LangParams[1]);
 
 		if shadowcreated >= 32750 then

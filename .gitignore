@@ -9,3 +9,7 @@ Shad/
 temp*
 *_history*
 *debug*
+*.dcu
+*-Copy.*
+*.stat
+Wind32/
