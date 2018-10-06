@@ -13,3 +13,5 @@ temp*
 *-Copy.*
 *.stat
 Wind32/
+*.identcache
+*.local
